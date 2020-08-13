@@ -58,6 +58,14 @@ class Action(MongoModel, EmbeddedMongoModel):
 class GoTo(Action):
     locations = fields.ListField()
 
+    @property
+    def source(self):
+        return self.locations[0]
+
+    @property
+    def destination(self):
+        return self.locations[-1]
+
 
 class EnterElevator(Action):
     elevator_id = fields.IntegerField()
