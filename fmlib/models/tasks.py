@@ -129,6 +129,10 @@ class Task(MongoModel):
     def from_payload(cls, payload, **kwargs):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('task_id')
+        if document.get("start_time"):
+            document["start_time"] = dateutil.parser.parse(document.pop("start_time"))
+        if document.get("finish_time"):
+            document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
         for key, value in kwargs.items():
             document[key] = value.from_payload(document.pop(key))
         task = cls.from_document(document)
@@ -141,6 +145,11 @@ class Task(MongoModel):
         dict_repr.pop('_cls')
         dict_repr["task_id"] = str(dict_repr.pop('_id'))
         dict_repr["constraints"] = self.constraints.to_dict()
+        if dict_repr.get("start_time"):
+            dict_repr["start_time"] = self.start_time.isoformat()
+        if dict_repr.get("finish_time"):
+            dict_repr["finish_time"] = self.finish_time.isoformat()
+
         return dict_repr
 
     def to_msg(self):
