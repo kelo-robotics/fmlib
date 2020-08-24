@@ -43,11 +43,12 @@ class TransportationRequest(TaskRequest):
             logging.warning('Could not save models to MongoDB')
 
     @classmethod
-    def from_payload(cls, payload):
+    def from_payload(cls, payload, save=True):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('request_id')
         request = TransportationRequest.from_document(document)
-        request.save()
+        if save:
+            request.save()
         return request
 
     def to_dict(self):

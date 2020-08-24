@@ -94,7 +94,7 @@ class TaskPlan(EmbeddedMongoModel):
 
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
-    request = fields.ReferenceField(TaskRequest)
+    request = fields.EmbeddedDocumentField(TaskRequest)
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
     constraints = fields.EmbeddedDocumentField(TaskConstraints)
@@ -126,7 +126,7 @@ class Task(MongoModel):
         return task
 
     @classmethod
-    def from_payload(cls, payload, **kwargs):
+    def from_payload(cls, payload, save=True, **kwargs):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('task_id')
         if document.get("start_time"):
@@ -134,10 +134,12 @@ class Task(MongoModel):
         if document.get("finish_time"):
             document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
         for key, value in kwargs.items():
-            document[key] = value.from_payload(document.pop(key))
+            document[key] = value.from_payload(document.pop(key), save=save)
         task = cls.from_document(document)
-        task.save()
-        task.update_status(TaskStatusConst.UNALLOCATED)
+        if save:
+            task.save()
+            task.update_status(TaskStatusConst.UNALLOCATED)
+
         return task
 
     def to_dict(self):
@@ -159,7 +161,7 @@ class Task(MongoModel):
     @classmethod
     def from_request(cls, request):
         constraints = TaskConstraints(hard=request.hard_constraints)
-        task = cls.create_new(request=request.request_id, constraints=constraints)
+        task = cls.create_new(request=request, constraints=constraints)
         return task
 
     @property
@@ -200,13 +202,14 @@ class Task(MongoModel):
             task_status.archive()
             self.archive()
 
-    def assign_robots(self, robot_ids):
+    def assign_robots(self, robot_ids, save=True,):
         self.assigned_robots = robot_ids
         # Assigns the first robot in the list to the plan
         # Does not work for single-task multi-robot
         self.plan[0].robot = robot_ids[0]
-        self.update_status(TaskStatusConst.ALLOCATED)
-        self.save()
+        if save:
+            self.save()
+            self.update_status(TaskStatusConst.ALLOCATED)
 
     def unassign_robots(self):
         self.assigned_robots = list()
@@ -358,7 +361,7 @@ class TransportationTaskConstraints(TaskConstraints):
     temporal = fields.EmbeddedDocumentField(TransportationTemporalConstraints)
 
     @classmethod
-    def from_payload(cls, payload):
+    def from_payload(cls, payload, **kwargs):
         document = Document.from_payload(payload)
         document["temporal"] = TransportationTemporalConstraints.from_payload(document.pop("temporal"))
         task_constraints = cls.from_document(document)
@@ -391,7 +394,7 @@ class TransportationTask(Task):
         pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time, latest_time=request.latest_pickup_time)
         temporal = TransportationTemporalConstraints(pickup=pickup, duration=InterTimepointConstraint())
         constraints = TransportationTaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(request=request.request_id, constraints=constraints)
+        task = cls.create_new(request=request, constraints=constraints)
         return task
 
     def archive(self):

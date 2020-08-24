@@ -130,17 +130,19 @@ class Robot(MongoModel):
     def get_robot(robot_id):
         return Robot.objects.get_robot(robot_id)
 
-    def update_position(self, **kwargs):
+    def update_position(self, save=True, **kwargs):
         self.position.update_2d_pose(**kwargs)
-        self.save()
+        if save:
+            self.save()
 
     @classmethod
-    def create_new(cls, robot_id, **kwargs):
+    def create_new(cls, robot_id, save=True, **kwargs):
+        if 'position' not in kwargs.keys():
+            kwargs.update(position=Position())
+
         robot = cls(robot_id, **kwargs)
-        robot.position = Position()
-
-        robot.save()
-
+        if save:
+            robot.save()
         return robot
 
     def to_dict(self):
