@@ -13,7 +13,7 @@ from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
 
 from fmlib.models.actions import Action, ActionProgress
-from fmlib.models.requests import TaskRequest
+from fmlib.models import requests
 from fmlib.utils.messages import Document
 from fmlib.utils.messages import Message
 
@@ -72,215 +72,6 @@ TaskManager = Manager.from_queryset(TaskQuerySet)
 TaskStatusManager = Manager.from_queryset(TaskStatusQuerySet)
 
 
-class TaskConstraints(EmbeddedMongoModel):
-    hard = fields.BooleanField(default=True)
-
-    @classmethod
-    def from_payload(cls, payload):
-        document = Document.from_payload(payload)
-        task_constraints = cls.from_document(document)
-        return task_constraints
-
-    def to_dict(self):
-        dict_repr = self.to_son().to_dict()
-        dict_repr.pop('_cls')
-        return dict_repr
-
-
-class TaskPlan(EmbeddedMongoModel):
-    robot = fields.CharField(blank=True)
-    actions = fields.EmbeddedDocumentListField(Action)
-
-
-class Task(MongoModel):
-    task_id = fields.UUIDField(primary_key=True)
-    request = fields.EmbeddedDocumentField(TaskRequest)
-    assigned_robots = fields.ListField(blank=True)
-    plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
-    constraints = fields.EmbeddedDocumentField(TaskConstraints)
-    start_time = fields.DateTimeField()
-    finish_time = fields.DateTimeField()
-
-    objects = TaskManager()
-
-    class Meta:
-        archive_collection = 'task_archive'
-        ignore_unknown_fields = True
-        meta_model = 'task'
-
-    def save(self):
-        try:
-            super().save(cascade=True)
-        except ServerSelectionTimeoutError:
-            logging.warning('Could not save models to MongoDB')
-
-    @classmethod
-    def create_new(cls, **kwargs):
-        if 'task_id' not in kwargs.keys():
-            kwargs.update(task_id=uuid.uuid4())
-        elif 'constraints' not in kwargs.keys():
-            kwargs.update(constraints=TaskConstraints())
-        task = cls(**kwargs)
-        task.save()
-        task.update_status(TaskStatusConst.UNALLOCATED)
-        return task
-
-    @classmethod
-    def from_payload(cls, payload, save=True, **kwargs):
-        document = Document.from_payload(payload)
-        document['_id'] = document.pop('task_id')
-        if document.get("start_time"):
-            document["start_time"] = dateutil.parser.parse(document.pop("start_time"))
-        if document.get("finish_time"):
-            document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
-        for key, value in kwargs.items():
-            document[key] = value.from_payload(document.pop(key), save=save)
-        task = cls.from_document(document)
-        if save:
-            task.save()
-            task.update_status(TaskStatusConst.UNALLOCATED)
-
-        return task
-
-    def to_dict(self):
-        dict_repr = self.to_son().to_dict()
-        dict_repr.pop('_cls')
-        dict_repr["task_id"] = str(dict_repr.pop('_id'))
-        dict_repr["constraints"] = self.constraints.to_dict()
-        if dict_repr.get("start_time"):
-            dict_repr["start_time"] = self.start_time.isoformat()
-        if dict_repr.get("finish_time"):
-            dict_repr["finish_time"] = self.finish_time.isoformat()
-
-        return dict_repr
-
-    def to_msg(self):
-        msg = Message.from_model(self)
-        return msg
-
-    @classmethod
-    def from_request(cls, request):
-        constraints = TaskConstraints(hard=request.hard_constraints)
-        task = cls.create_new(request=request, constraints=constraints)
-        return task
-
-    @property
-    def delayed(self):
-        return self.status.delayed
-
-    @delayed.setter
-    def delayed(self, boolean):
-        task_status = Task.get_task_status(self.task_id)
-        task_status.delayed = boolean
-        task_status.save()
-
-    @property
-    def hard_constraints(self):
-        return self.constraints.hard
-
-    @hard_constraints.setter
-    def hard_constraints(self, boolean):
-        self.constraints.hard = boolean
-        self.save()
-
-    def archive(self):
-        with switch_collection(Task, Task.Meta.archive_collection):
-            super().save()
-        self.delete()
-
-    def update_status(self, status):
-        try:
-            task_status = Task.get_task_status(self.task_id)
-            task_status.status = status
-        except DoesNotExist:
-            task_status = TaskStatus(task=self.task_id, status=status)
-        task_status.save()
-        if status in [TaskStatusConst.COMPLETED,
-                      TaskStatusConst.CANCELED,
-                      TaskStatusConst.ABORTED,
-                      TaskStatusConst.PREEMPTED]:
-            task_status.archive()
-            self.archive()
-
-    def assign_robots(self, robot_ids, save=True,):
-        self.assigned_robots = robot_ids
-        # Assigns the first robot in the list to the plan
-        # Does not work for single-task multi-robot
-        self.plan[0].robot = robot_ids[0]
-        if save:
-            self.save()
-            self.update_status(TaskStatusConst.ALLOCATED)
-
-    def unassign_robots(self):
-        self.assigned_robots = list()
-        self.plan[0].robot = None
-        self.save()
-
-    def update_plan(self, task_plan):
-        # Adds the section of the plan that is independent from the robot,
-        # e.g., for transportation tasks, the plan between pickup and delivery
-        self.plan.append(task_plan)
-        self.update_status(TaskStatusConst.PLANNED)
-        self.save()
-
-    def update_schedule(self, schedule):
-        self.start_time = schedule['start_time']
-        self.finish_time = schedule['finish_time']
-        self.save()
-
-    def is_executable(self):
-        current_time = TimeStamp()
-        start_time = TimeStamp.from_datetime(self.start_time)
-
-        if start_time < current_time:
-            return True
-        else:
-            return False
-
-    @property
-    def meta_model(self):
-        return self.Meta.meta_model
-
-    @property
-    def status(self):
-        return TaskStatus.objects.get({"_id": self.task_id})
-
-    @classmethod
-    def get_task(cls, task_id):
-        return cls.objects.get_task(task_id)
-
-
-    @staticmethod
-    def get_task_status(task_id):
-        return TaskStatus.objects.get({'_id': task_id})
-
-
-    @staticmethod
-    def get_tasks_by_status(status):
-        return [status.task for status in TaskStatus.objects.by_status(status)]
-
-
-    @classmethod
-    def get_tasks_by_robot(cls, robot_id):
-        return [task for task in cls.objects.all() if robot_id in task.assigned_robots]
-
-
-    @classmethod
-    def get_tasks(cls, robot_id=None, status=None):
-        if status:
-            tasks = cls.get_tasks_by_status(status)
-        else:
-            tasks = cls.objects.all()
-
-        tasks_by_robot = [task for task in tasks if robot_id in task.assigned_robots]
-
-        return tasks_by_robot
-
-    def update_progress(self, action_id, action_status, **kwargs):
-        status = TaskStatus.objects.get({"_id": self.task_id})
-        status.update_progress(action_id, action_status, **kwargs)
-
-
 class TimepointConstraint(EmbeddedMongoModel):
     earliest_time = fields.DateTimeField()
     latest_time = fields.DateTimeField()
@@ -337,14 +128,16 @@ class InterTimepointConstraint(EmbeddedMongoModel):
         self.variance = variance
 
 
-class TransportationTemporalConstraints(EmbeddedMongoModel):
-    pickup = fields.EmbeddedDocumentField(TimepointConstraint)
+class TemporalConstraints(EmbeddedMongoModel):
+    start = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
+    finish = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     duration = fields.EmbeddedDocumentField(InterTimepointConstraint)
 
     @classmethod
     def from_payload(cls, payload):
         document = Document.from_payload(payload)
-        document['pickup'] = TimepointConstraint.from_payload(document.get('pickup'))
+        document['start'] = TimepointConstraint.from_payload(document.get('start'))
+        document['finish'] = TimepointConstraint.from_payload(document.get('finish'))
         document['duration'] = InterTimepointConstraint.from_payload(document.get('duration'))
         temporal_constraints = cls.from_document(document)
         return temporal_constraints
@@ -352,55 +145,126 @@ class TransportationTemporalConstraints(EmbeddedMongoModel):
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr.pop('_cls')
-        dict_repr['pickup'] = self.pickup.to_dict()
+        dict_repr['start'] = self.start.to_dict()
+        dict_repr['finish'] = self.start.to_dict()
         dict_repr['duration'] = self.duration.to_dict()
         return dict_repr
 
 
-class TransportationTaskConstraints(TaskConstraints):
-    temporal = fields.EmbeddedDocumentField(TransportationTemporalConstraints)
+class TaskConstraints(EmbeddedMongoModel):
+    hard = fields.BooleanField(default=True)
+    temporal = fields.EmbeddedDocumentField(TemporalConstraints)
 
     @classmethod
-    def from_payload(cls, payload, **kwargs):
+    def from_payload(cls, payload):
         document = Document.from_payload(payload)
-        document["temporal"] = TransportationTemporalConstraints.from_payload(document.pop("temporal"))
+        document["temporal"] = TemporalConstraints.from_payload(document.pop("temporal"))
         task_constraints = cls.from_document(document)
         return task_constraints
 
     def to_dict(self):
-        dict_repr = super().to_dict()
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
         dict_repr['temporal'] = self.temporal.to_dict()
         return dict_repr
 
 
-class TransportationTask(Task):
-    constraints = fields.EmbeddedDocumentField(TransportationTaskConstraints)
+class TaskPlan(EmbeddedMongoModel):
+    robot = fields.CharField(blank=True)
+    actions = fields.EmbeddedDocumentListField(Action)
+
+
+class Task(MongoModel):
+    task_id = fields.UUIDField(primary_key=True)
+    request = fields.EmbeddedDocumentField(requests.TaskRequest)
+    assigned_robots = fields.ListField(blank=True)
+    plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
+    constraints = fields.EmbeddedDocumentField(TaskConstraints)
+    departure_time = fields.DateTimeField()
+    start_time = fields.DateTimeField()
+    finish_time = fields.DateTimeField()
 
     objects = TaskManager()
 
+    class Meta:
+        archive_collection = 'task_archive'
+        ignore_unknown_fields = True
+        meta_model = 'task'
+
+    def save(self):
+        try:
+            super().save(cascade=True)
+        except ServerSelectionTimeoutError:
+            logging.warning('Could not save models to MongoDB')
+
     @classmethod
     def create_new(cls, **kwargs):
-        if 'constraints' not in kwargs.keys():
-            pickup = TimepointConstraint(earliest_time=datetime.now(),
+        if 'task_id' not in kwargs.keys():
+            kwargs.update(task_id=uuid.uuid4())
+        elif 'constraints' not in kwargs.keys():
+            start = TimepointConstraint(earliest_time=datetime.now(),
                                          latest_time=datetime.now() + timedelta(minutes=1))
-            temporal = TransportationTemporalConstraints(pickup=pickup, duration=InterTimepointConstraint())
-            kwargs.update(constraints=TransportationTaskConstraints(temporal=temporal))
-        task = super().create_new(**kwargs)
+            temporal = TemporalConstraints(start=start, duration=InterTimepointConstraint())
+            kwargs.update(constraints=TaskConstraints(temporal=temporal))
+        task = cls(**kwargs)
         task.save()
+        task.update_status(TaskStatusConst.UNALLOCATED)
         return task
+
+    @classmethod
+    def from_payload(cls, payload, save=True):
+        document = Document.from_payload(payload)
+        document['_id'] = document.pop('task_id')
+        if document.get("departure_time"):
+            document["departure_time"] = dateutil.parser.parse(document.pop("departure_time"))
+        if document.get("finish_time"):
+            document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
+        task = cls.from_document(document)
+        if save:
+            task.save()
+            task.update_status(TaskStatusConst.UNALLOCATED)
+
+        return task
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr["task_id"] = str(dict_repr.pop('_id'))
+        dict_repr["constraints"] = self.constraints.to_dict()
+        if dict_repr.get("departure_time"):
+            dict_repr["departure_time"] = self.departure_time.isoformat()
+        if dict_repr.get("finish_time"):
+            dict_repr["finish_time"] = self.finish_time.isoformat()
+
+        return dict_repr
+
+    def to_msg(self):
+        msg = Message.from_model(self)
+        return msg
 
     @classmethod
     def from_request(cls, request):
-        pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time, latest_time=request.latest_pickup_time)
-        temporal = TransportationTemporalConstraints(pickup=pickup, duration=InterTimepointConstraint())
-        constraints = TransportationTaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        constraints = TaskConstraints(hard=request.hard_constraints)
         task = cls.create_new(request=request, constraints=constraints)
         return task
 
-    def archive(self):
-        with switch_collection(TransportationTask, Task.Meta.archive_collection):
-            super().save()
-        self.delete()
+    @property
+    def delayed(self):
+        return self.status.delayed
+
+    @delayed.setter
+    def delayed(self, boolean):
+        task_status = Task.get_task_status(self.task_id)
+        task_status.delayed = boolean
+        task_status.save()
+
+    @property
+    def hard_constraints(self):
+        return self.constraints.hard
+
+    @hard_constraints.setter
+    def hard_constraints(self, boolean):
+        self.constraints.hard = boolean
+        self.save()
 
     @property
     def duration(self):
@@ -411,12 +275,13 @@ class TransportationTask(Task):
         self.save()
 
     @property
-    def pickup_constraint(self):
-        return self.constraints.temporal.pickup
+    def start_constraint(self):
+        return self.constraints.temporal.start
 
-    def update_pickup_constraint(self, earliest_time, latest_time):
-        self.pickup_constraint.update(earliest_time, latest_time)
-        self.save()
+    def update_start_constraint(self, earliest_time, latest_time, save=True):
+        self.start_constraint.update(earliest_time, latest_time)
+        if save:
+            self.save()
 
     @classmethod
     def get_earliest_task(cls, tasks=None):
@@ -425,10 +290,143 @@ class TransportationTask(Task):
         earliest_time = datetime.max
         earliest_task = None
         for task in tasks:
-            if task.pickup_constraint.earliest_time < earliest_time:
-                earliest_time = task.pickup_constraint.earliest_time
+            if task.start_constraint.earliest_time < earliest_time:
+                earliest_time = task.start_constraint.earliest_time
                 earliest_task = task
         return earliest_task
+
+    def archive(self):
+        with switch_collection(self, Task.Meta.archive_collection):
+            super().save()
+        self.delete()
+
+    def update_status(self, status):
+        try:
+            task_status = Task.get_task_status(self.task_id)
+            task_status.status = status
+        except DoesNotExist:
+            task_status = TaskStatus(task=self.task_id, status=status)
+        task_status.save()
+        if status in [TaskStatusConst.COMPLETED,
+                      TaskStatusConst.CANCELED,
+                      TaskStatusConst.ABORTED,
+                      TaskStatusConst.PREEMPTED]:
+            task_status.archive()
+            self.archive()
+
+    def assign_robots(self, robot_ids, save=True,):
+        self.assigned_robots = robot_ids
+        # Assigns the first robot in the list to the plan
+        # Does not work for single-task multi-robot
+        self.plan[0].robot = robot_ids[0]
+        if save:
+            self.save()
+            self.update_status(TaskStatusConst.ALLOCATED)
+
+    def unassign_robots(self):
+        self.assigned_robots = list()
+        self.plan[0].robot = None
+        self.save()
+
+    def update_plan(self, task_plan):
+        # Adds the section of the plan that is independent from the robot,
+        # e.g., for transportation tasks, the plan between pickup and delivery
+        self.plan.append(task_plan)
+        self.update_status(TaskStatusConst.PLANNED)
+        self.save()
+
+    def update_schedule(self, schedule):
+        if schedule.get("departure_time"):
+            self.departure_time = schedule["departure_time"]
+        if schedule.get("start_time"):
+            self.start_time = schedule['start_time']
+        if schedule.get("finish_time"):
+            self.finish_time = schedule['finish_time']
+        self.save()
+
+    def is_executable(self):
+        current_time = TimeStamp()
+        departure_time = TimeStamp.from_datetime(self.departure_time)
+
+        if departure_time < current_time:
+            return True
+        else:
+            return False
+
+    @property
+    def meta_model(self):
+        return self.Meta.meta_model
+
+    @property
+    def status(self):
+        return TaskStatus.objects.get({"_id": self.task_id})
+
+    @classmethod
+    def get_task(cls, task_id):
+        return cls.objects.get_task(task_id)
+
+
+    @staticmethod
+    def get_task_status(task_id):
+        return TaskStatus.objects.get({'_id': task_id})
+
+
+    @staticmethod
+    def get_tasks_by_status(status):
+        return [status.task for status in TaskStatus.objects.by_status(status)]
+
+
+    @classmethod
+    def get_tasks_by_robot(cls, robot_id):
+        return [task for task in cls.objects.all() if robot_id in task.assigned_robots]
+
+
+    @classmethod
+    def get_tasks(cls, robot_id=None, status=None):
+        if status:
+            tasks = cls.get_tasks_by_status(status)
+        else:
+            tasks = cls.objects.all()
+
+        tasks_by_robot = [task for task in tasks if robot_id in task.assigned_robots]
+
+        return tasks_by_robot
+
+    def update_progress(self, action_id, action_status, **kwargs):
+        status = TaskStatus.objects.get({"_id": self.task_id})
+        status.update_progress(action_id, action_status, **kwargs)
+
+
+class TransportationTask(Task):
+    request = fields.EmbeddedDocumentField(requests.TransportationRequest)
+
+    objects = TaskManager()
+
+    @classmethod
+    def from_request(cls, request):
+        pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time,
+                                     latest_time=request.latest_pickup_time)
+        temporal = TemporalConstraints(start=pickup,
+                                       duration=InterTimepointConstraint())
+        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        task = cls.create_new(request=request, constraints=constraints)
+        return task
+
+
+class NavigationTask(Task):
+    request = fields.EmbeddedDocumentField(requests.NavigationRequest)
+
+    objects = TaskManager()
+
+    @classmethod
+    def from_request(cls, request):
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
+                                      latest_time=request.latest_arrival_time)
+        temporal = TemporalConstraints(start=arrival,
+                                       duration=InterTimepointConstraint())
+        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        task = cls.create_new(request=request, constraints=constraints)
+        return task
 
 
 class TaskProgress(EmbeddedMongoModel):
