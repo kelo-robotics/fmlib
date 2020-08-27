@@ -89,6 +89,10 @@ class TransportationRequest(TaskRequest):
     def finish_location_level(self):
         return self.delivery_location_level
 
+    @property
+    def earliest_start_time(self):
+        return self.earliest_pickup_time
+
     def validate_request(self, path_planner):
         if self.pickup_location == self.delivery_location:
             raise InvalidRequestLocation("Pickup and delivery location are the same")
@@ -135,6 +139,10 @@ class NavigationRequest(TaskRequest):
     @property
     def finish_location_level(self):
         return self.goal_location_level
+
+    @property
+    def earliest_start_time(self):
+        return self.earliest_arrival_time
 
     def validate_request(self, path_planner):
         if self.latest_arrival_time < datetime.now():
