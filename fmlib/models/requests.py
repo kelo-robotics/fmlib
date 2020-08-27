@@ -24,6 +24,11 @@ class TaskRequest(Request):
         archive_collection = 'task_request_archive'
         ignore_unknown_fields = True
         meta_model = "task-request"
+        task_type = "Task"
+
+    @property
+    def task_type(self):
+        return self.Meta.task_type
 
     def save(self):
         try:
@@ -69,10 +74,6 @@ class TransportationRequest(TaskRequest):
         task_type = "TransportationTask"
 
     @property
-    def task_type(self):
-        return self.Meta.task_type
-
-    @property
     def start_location(self):
         return self.pickup_location
 
@@ -111,12 +112,13 @@ class NavigationRequest(TaskRequest):
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.DateTimeField()
     latest_arrival_time = fields.DateTimeField()
+    wait_at_goal = fields.IntegerField()  # seconds
 
     class Meta:
         archive_collection = TaskRequest.Meta.archive_collection
         ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
         meta_model = TaskRequest.Meta.meta_model
-        task_type = "TransportationTask"
+        task_type = "NavigationTask"
 
     @property
     def start_location(self):
@@ -133,6 +135,12 @@ class NavigationRequest(TaskRequest):
     @property
     def finish_location_level(self):
         return self.goal_location_level
+
+    def validate_request(self, path_planner):
+        if self.latest_arrival_time < datetime.now():
+            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_pickup_time)
+        elif not path_planner.is_valid_location(self.goal_location, behaviour="docking"):
+            raise InvalidRequestLocation("%s is not a valid goal location." % self.pickup_location)
 
     def to_dict(self):
         dict_repr = super().to_dict()
