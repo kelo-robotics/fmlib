@@ -79,6 +79,10 @@ class WaitForElevator(Action):
     pass
 
 
+class WaitAtLocation(Action):
+    wait_for = fields.IntegerField()  # seconds
+
+
 class RequestElevator(Action):
     start_floor = fields.IntegerField()
     goal_floor = fields.IntegerField()
