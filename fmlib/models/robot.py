@@ -95,6 +95,9 @@ class Version(EmbeddedMongoModel):
 class RobotQuerySet(QuerySet):
 
     def get_robot(self, robot_id):
+        if isinstance(robot_id, int):
+            robot_id = str(robot_id)
+
         return self.get({'_id': robot_id})
 
 
