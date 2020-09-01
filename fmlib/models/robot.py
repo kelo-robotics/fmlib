@@ -26,23 +26,23 @@ class ComponentStatus(EmbeddedMongoModel):
         self.issues = issues
 
 
-class CurrentTask(EmbeddedMongoModel):
-
-    status = fields.CharField()
-    task_id = fields.ReferenceField(Task)
-    action_id = fields.ReferenceField(Action)
-
-
 class Availability(EmbeddedMongoModel):
 
     status = fields.IntegerField(default=AvailabilityStatus.NO_COMMUNICATION, blank=True)
-    current_task = fields.EmbeddedDocumentField(CurrentTask, default=None, blank=True)
+    current_task = fields.UUIDField(default=None, blank=True)
+
+    class Meta:
+        cascade = True
+
+    def update_status(self, availability_status, current_task):
+        self.status = availability_status
+        self.current_task = current_task
 
 
 class RobotStatus(EmbeddedMongoModel):
 
     availability = fields.EmbeddedDocumentField(Availability)
-    component_status = fields.EmbeddedDocumentField(ComponentStatus)
+    component = fields.EmbeddedDocumentField(ComponentStatus)
 
 
 class HardwareComponent(EmbeddedMongoModel):
@@ -95,6 +95,9 @@ class Version(EmbeddedMongoModel):
 class RobotQuerySet(QuerySet):
 
     def get_robot(self, robot_id):
+        if isinstance(robot_id, int):
+            robot_id = str(robot_id)
+
         return self.get({'_id': robot_id})
 
 
@@ -134,6 +137,14 @@ class Robot(MongoModel):
         self.position.update_2d_pose(**kwargs)
         if save:
             self.save()
+
+    def update_component_status(self, health_status, issues=None):
+        self.status.component.update_status(health_status, issues)
+        self.save()
+
+    def update_availability(self, availability_status, current_task=None):
+        self.status.availability.update_status(availability_status, current_task)
+        self.save()
 
     @classmethod
     def create_new(cls, robot_id, save=True, **kwargs):
