@@ -1,8 +1,6 @@
 import logging
 
-from fmlib.models.actions import Action
 from fmlib.models.environment import Position
-from fmlib.models.tasks import Task
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.manager import Manager
@@ -129,9 +127,18 @@ class Robot(MongoModel):
             super().save()
         self.delete()
 
-    @staticmethod
-    def get_robot(robot_id):
-        return Robot.objects.get_robot(robot_id)
+    @classmethod
+    def get_robot(cls, robot_id):
+        return cls.objects.get_robot(robot_id)
+
+    @classmethod
+    def get_robots(cls):
+        return cls.objects.all()
+
+    @classmethod
+    def get_robots_by_availability(cls, availability_status):
+        robots = cls.get_robots()
+        return [robot for robot in robots if robot.status.availability.status == availability_status]
 
     def update_position(self, save=True, **kwargs):
         self.position.update_2d_pose(**kwargs)
