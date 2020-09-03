@@ -1,5 +1,7 @@
 import uuid
 
+from fmlib.models.environment import Position
+from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
@@ -19,6 +21,25 @@ ActionManager = Manager.from_queryset(ActionQuerySet)
 class Duration(EmbeddedMongoModel):
     mean = fields.FloatField()
     variance = fields.FloatField()
+
+    @property
+    def standard_dev(self):
+        return round(self.variance ** 0.5, 3)
+
+    def __str__(self):
+        to_print = ""
+        to_print += "N({}, {})".format(self.mean, self.standard_dev)
+        return to_print
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        return cls.from_document(document)
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
+        return dict_repr
 
     def update(self, mean, variance):
         self.mean = mean
@@ -79,10 +100,6 @@ class WaitForElevator(Action):
     pass
 
 
-class WaitAtLocation(Action):
-    wait_for = fields.IntegerField()  # seconds
-
-
 class RequestElevator(Action):
     start_floor = fields.IntegerField()
     goal_floor = fields.IntegerField()
@@ -98,6 +115,21 @@ class Dock(Action):
 
 class Undock(Action):
     pass
+
+
+class Navigation(Action):
+    goal = fields.EmbeddedDocumentField(Position)
+    velocity = fields.FloatField()
+
+
+class StandStill(Action):
+    pass
+
+
+class WallFollowing(Action):
+    checkpoints = fields.EmbeddedDocumentListField(Position)
+    polygon = fields.EmbeddedDocumentListField(Position)
+    velocity = fields.FloatField()
 
 
 class ActionProgress(EmbeddedMongoModel):

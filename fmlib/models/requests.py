@@ -2,7 +2,7 @@ import logging
 
 from pymodm import MongoModel, fields
 from pymongo.errors import ServerSelectionTimeoutError
-from ropod.structs.task import TaskPriority
+from ropod.structs.task import TaskPriority, DisinfectionDose
 
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
@@ -157,11 +157,61 @@ class NavigationRequest(TaskRequest):
         return dict_repr
 
 
+class CoverageRequest(TaskRequest):
+    area = fields.CharField()
+    start_location = fields.CharField()
+    finish_location = fields.CharField()
+    earliest_start_time = fields.DateTimeField()
+    latest_start_time = fields.DateTimeField()
+    dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
+
+    class Meta:
+        archive_collection = TaskRequest.Meta.archive_collection
+        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
+        meta_model = TaskRequest.Meta.meta_model
+        task_type = "CoverageTask"
+
+    def get_velocity(self):
+        """ Returns max velocity (m/s) based on the dose """
+        if self.dose == DisinfectionDose.HIGH:
+            velocity = 0.1
+        elif self.dose == DisinfectionDose.NORMAL:
+            velocity = 0.3
+        elif self.dose == DisinfectionDose.LOW:
+            velocity = 0.5
+        else:
+            print("Dose is invalid")
+            raise ValueError(self.dose)
+        return velocity
+
+    def validate_request(self, path_planner):
+        if self.latest_start_time < datetime.now():
+            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
+        elif not path_planner.is_valid_area(self.area):
+            raise InvalidRequestArea("%s is not a valid area." % self.area)
+        # TODO: validate area
+
+    def complete_request(self, path_planner):
+        self.start_location = path_planner.get_start_location(self.area)
+        self.finish_location = self.start_location
+        self.save()
+
+    def to_dict(self):
+        dict_repr = super().to_dict()
+        dict_repr["earliest_start_time"] = self.earliest_start_time.isoformat()
+        dict_repr["latest_start_time"] = self.latest_start_time.isoformat()
+        return dict_repr
+
+
 class InvalidRequest(Exception):
     pass
 
 
 class InvalidRequestLocation(InvalidRequest):
+    pass
+
+
+class InvalidRequestArea(InvalidRequest):
     pass
 
 

@@ -3,6 +3,10 @@ import uuid
 from datetime import datetime, timedelta
 
 import dateutil.parser
+from fmlib.models import requests
+from fmlib.models.actions import Action, ActionProgress, Duration
+from fmlib.utils.messages import Document
+from fmlib.utils.messages import Message
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
@@ -11,11 +15,6 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
-
-from fmlib.models.actions import Action, ActionProgress
-from fmlib.models import requests
-from fmlib.utils.messages import Document
-from fmlib.utils.messages import Message
 
 
 class TaskQuerySet(QuerySet):
@@ -100,45 +99,17 @@ class TimepointConstraint(EmbeddedMongoModel):
         self.latest_time = latest_time
 
 
-class InterTimepointConstraint(EmbeddedMongoModel):
-    mean = fields.FloatField()
-    variance = fields.FloatField()
-
-    @property
-    def standard_dev(self):
-        return round(self.variance ** 0.5, 3)
-
-    def __str__(self):
-        to_print = ""
-        to_print += "N({}, {})".format(self.mean, self.standard_dev)
-        return to_print
-
-    @classmethod
-    def from_payload(cls, payload):
-        document = Document.from_payload(payload)
-        return cls.from_document(document)
-
-    def to_dict(self):
-        dict_repr = self.to_son().to_dict()
-        dict_repr.pop('_cls')
-        return dict_repr
-
-    def update(self, mean, variance):
-        self.mean = mean
-        self.variance = variance
-
-
 class TemporalConstraints(EmbeddedMongoModel):
     start = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     finish = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
-    duration = fields.EmbeddedDocumentField(InterTimepointConstraint)
+    duration = fields.EmbeddedDocumentField(Duration)
 
     @classmethod
     def from_payload(cls, payload):
         document = Document.from_payload(payload)
         document['start'] = TimepointConstraint.from_payload(document.get('start'))
         document['finish'] = TimepointConstraint.from_payload(document.get('finish'))
-        document['duration'] = InterTimepointConstraint.from_payload(document.get('duration'))
+        document['duration'] = Duration.from_payload(document.get('duration'))
         temporal_constraints = cls.from_document(document)
         return temporal_constraints
 
@@ -204,7 +175,7 @@ class Task(MongoModel):
         elif 'constraints' not in kwargs.keys():
             start = TimepointConstraint(earliest_time=datetime.now(),
                                          latest_time=datetime.now() + timedelta(minutes=1))
-            temporal = TemporalConstraints(start=start, duration=InterTimepointConstraint())
+            temporal = TemporalConstraints(start=start, duration=Duration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
         task = cls(**kwargs)
         task.save()
@@ -407,7 +378,7 @@ class TransportationTask(Task):
         pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time,
                                      latest_time=request.latest_pickup_time)
         temporal = TemporalConstraints(start=pickup,
-                                       duration=InterTimepointConstraint())
+                                       duration=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints)
         return task
@@ -423,7 +394,23 @@ class NavigationTask(Task):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
                                       latest_time=request.latest_arrival_time)
         temporal = TemporalConstraints(start=arrival,
-                                       duration=InterTimepointConstraint())
+                                       duration=Duration())
+        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        task = cls.create_new(request=request, constraints=constraints)
+        return task
+
+
+class CoverageTask(Task):
+    request = fields.EmbeddedDocumentField(requests.CoverageRequest)
+
+    objects = TaskManager()
+
+    @classmethod
+    def from_request(cls, request):
+        start = TimepointConstraint(earliest_time=request.earliest_start_time,
+                                    latest_time=request.latest_start_time)
+        temporal = TemporalConstraints(start=start,
+                                       duration=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints)
         return task
