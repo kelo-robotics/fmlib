@@ -1,4 +1,5 @@
 import yaml
+import json
 from importlib_resources import open_text
 
 
@@ -10,6 +11,11 @@ def load_file_from_module(module, file_name):
 # YAML config files
 def load_yaml(yaml_file):
     data = yaml.safe_load(yaml_file)
+    return data
+
+
+def load_json(json_file):
+    data = json.load(json_file)
     return data
 
 
