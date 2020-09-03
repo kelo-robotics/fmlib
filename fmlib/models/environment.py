@@ -5,7 +5,7 @@ class Position(EmbeddedMongoModel):
 
     x = fields.FloatField()
     y = fields.FloatField()
-    theta = fields.FloatField()
+    theta = fields.FloatField(default=0)
 
     class Meta:
         ignore_unknown_fields = True
