@@ -118,6 +118,7 @@ class Undock(Action):
 
 
 class Navigation(Action):
+    start = fields.EmbeddedDocumentField(Position)
     goal = fields.EmbeddedDocumentField(Position)
     velocity = fields.FloatField()
 
