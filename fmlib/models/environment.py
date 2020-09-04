@@ -14,3 +14,6 @@ class Position(EmbeddedMongoModel):
         self.x = x
         self.y = y
         self.theta = theta
+
+    def get_distance(self, other):
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
