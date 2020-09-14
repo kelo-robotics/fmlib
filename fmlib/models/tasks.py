@@ -434,8 +434,12 @@ class TaskProgress(EmbeddedMongoModel):
 
     def update_action_progress(self, action_id, action_status, **kwargs):
         idx = self._get_action_index(action_id)
-        self.actions.pop(idx)
-        action_progress = ActionProgress(action_id, action_status, **kwargs)
+        action_progress = self.actions.pop(idx)
+        action_progress.status = action_status
+        if kwargs.get("start_time"):
+            action_progress.start_time = kwargs.get("start_time")
+        if kwargs.get("finish_time"):
+            action_progress.finish_time = kwargs.get("finish_time")
         self.actions.insert(idx, action_progress)
 
     def complete(self):
