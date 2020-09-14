@@ -61,15 +61,18 @@ class Action(MongoModel, EmbeddedMongoModel):
     def create_new(cls, **kwargs):
         if 'action_id' not in kwargs.keys():
             kwargs.update(action_id=uuid.uuid4())
+        save_in_db = kwargs.pop("save_in_db", True)
         action = cls(**kwargs)
-        action.save()
+        if save_in_db:
+            action.save()
         return action
 
-    def update_duration(self, mean, variance):
+    def update_duration(self, mean, variance, save_in_db=True):
         if not self.duration:
             self.duration = Duration()
         self.duration.update(mean, variance)
-        self.save()
+        if save_in_db:
+            self.save()
 
     @classmethod
     def get_action(cls, action_id):

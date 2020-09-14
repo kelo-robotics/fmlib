@@ -137,9 +137,10 @@ class Robot(MongoModel):
         robots = cls.get_robots()
         return [robot for robot in robots if robot.status.availability.status == availability_status]
 
-    def update_position(self, save=True, **kwargs):
+    def update_position(self, **kwargs):
+        save_in_db = kwargs.pop("save_in_db", True)
         self.position.update_2d_pose(**kwargs)
-        if save:
+        if save_in_db:
             self.save()
 
     def update_component_status(self, health_status, issues=None):
@@ -151,12 +152,13 @@ class Robot(MongoModel):
         self.save()
 
     @classmethod
-    def create_new(cls, robot_id, save=True, **kwargs):
+    def create_new(cls, robot_id, **kwargs):
+        save_in_db = kwargs.pop("save_in_db", True)
         if 'position' not in kwargs.keys():
             kwargs.update(position=Position())
 
         robot = cls(robot_id, **kwargs)
-        if save:
+        if save_in_db:
             robot.save()
         return robot
 

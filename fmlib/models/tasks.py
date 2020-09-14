@@ -174,7 +174,7 @@ class Task(MongoModel):
             kwargs.update(task_id=uuid.uuid4())
         elif 'constraints' not in kwargs.keys():
             start = TimepointConstraint(earliest_time=datetime.now(),
-                                         latest_time=datetime.now() + timedelta(minutes=1))
+                                        latest_time=datetime.now() + timedelta(minutes=1))
             temporal = TemporalConstraints(start=start, duration=Duration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
         task = cls(**kwargs)
@@ -183,7 +183,7 @@ class Task(MongoModel):
         return task
 
     @classmethod
-    def from_payload(cls, payload, save=True):
+    def from_payload(cls, payload, save_in_db=True):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('task_id')
         if document.get("departure_time"):
@@ -191,7 +191,7 @@ class Task(MongoModel):
         if document.get("finish_time"):
             document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
         task = cls.from_document(document)
-        if save:
+        if save_in_db:
             task.save()
             task.update_status(TaskStatusConst.UNALLOCATED)
 
@@ -249,9 +249,9 @@ class Task(MongoModel):
     def start_constraint(self):
         return self.constraints.temporal.start
 
-    def update_start_constraint(self, earliest_time, latest_time, save=True):
+    def update_start_constraint(self, earliest_time, latest_time, save_in_db=True):
         self.start_constraint.update(earliest_time, latest_time)
-        if save:
+        if save_in_db:
             self.save()
 
     @classmethod
@@ -285,12 +285,12 @@ class Task(MongoModel):
             task_status.archive()
             self.archive()
 
-    def assign_robots(self, robot_ids, save=True,):
+    def assign_robots(self, robot_ids, save_in_db=True,):
         self.assigned_robots = robot_ids
         # Assigns the first robot in the list to the plan
         # Does not work for single-task multi-robot
         self.plan[0].robot = robot_ids[0]
-        if save:
+        if save_in_db:
             self.save()
             self.update_status(TaskStatusConst.ALLOCATED)
 
@@ -357,11 +357,12 @@ class Task(MongoModel):
         if status:
             tasks = cls.get_tasks_by_status(status)
         else:
-            tasks = cls.objects.all()
+            tasks = [task for task in cls.objects.all()]
 
-        tasks_by_robot = [task for task in tasks if robot_id in task.assigned_robots]
+        if robot_id:
+            tasks = [task for task in tasks if robot_id in task.assigned_robots]
 
-        return tasks_by_robot
+        return tasks
 
     def update_progress(self, action_id, action_status, **kwargs):
         status = TaskStatus.objects.get({"_id": self.task_id})
