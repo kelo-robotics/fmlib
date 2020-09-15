@@ -1,12 +1,14 @@
 import logging
+import sys
+from datetime import datetime
 
+from fmlib.models.users import User
+from fmlib.utils.messages import Document
 from pymodm import MongoModel, fields
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
 
-from fmlib.models.users import User
-from fmlib.utils.messages import Document
-from datetime import datetime
+this_module = sys.modules[__name__]
 
 
 class Request(MongoModel):
@@ -53,6 +55,58 @@ class TaskRequest(Request):
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr["request_id"] = str(dict_repr.pop('_id'))
+        return dict_repr
+
+
+class TasksRequest(Request):
+    requests = fields.EmbeddedDocumentListField(TaskRequest)
+
+    class Meta:
+        collection_name = "tasks_request"
+        archive_collection = 'tasks_request_archive'
+        ignore_unknown_fields = True
+        meta_model = "tasks-request"
+
+    @property
+    def meta_model(self):
+        return self.Meta.meta_model
+
+    def save(self):
+        try:
+            super().save(cascade=True)
+        except ServerSelectionTimeoutError:
+            logging.warning('Could not save models to MongoDB')
+
+    @classmethod
+    def create_new(cls, **kwargs):
+        request_ids = [request.request_id for request in kwargs.get("requests")]
+        # All requests have the same request id
+        if len(set(request_ids)) == 1:
+            tasks_request = cls(request_id=request_ids[0], **kwargs)
+            return tasks_request
+
+    @classmethod
+    def from_payload(cls, payload, save=True):
+        document = Document.from_payload(payload)
+        document['_id'] = document.pop('request_id')
+        requests = list()
+        for request in document['requests']:
+            request_type = request.pop("_cls").split('.')[-1]
+            request_cls = getattr(this_module, request_type)
+            requests.append(request_cls.from_payload(request))
+        document['requests'] = requests
+        tasks_request = cls.from_document(document)
+        if save:
+            tasks_request.save()
+        return tasks_request
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr["request_id"] = str(dict_repr.pop('_id'))
+        requests = list()
+        for request in self.requests:
+            requests.append(request.to_dict())
+        dict_repr["requests"] = requests
         return dict_repr
 
 
