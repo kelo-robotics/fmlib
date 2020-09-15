@@ -21,6 +21,7 @@ class TaskRequest(Request):
 
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
+    eligible_robots = fields.ListField(blank=True)
 
     class Meta:
         archive_collection = 'task_request_archive'
