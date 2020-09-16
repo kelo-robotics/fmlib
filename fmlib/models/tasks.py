@@ -324,6 +324,19 @@ class Task(MongoModel):
         else:
             return False
 
+    def is_frozen(self):
+        try:
+            task_status = Task.get_task_status(self.task_id)
+        except DoesNotExist:
+            with switch_collection(Task, Task.Meta.archive_collection):
+                task_status = Task.get_task_status(self.task_id)
+        if task_status.status in [TaskStatusConst.SCHEDULED,
+                                  TaskStatusConst.DISPATCHED,
+                                  TaskStatusConst.ONGOING,
+                                  TaskStatusConst.COMPLETED]:
+            return True
+        return False
+
     @property
     def meta_model(self):
         return self.Meta.meta_model
