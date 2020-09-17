@@ -1,6 +1,8 @@
 import uuid
 
+from fmlib.models.robot import RobotManager
 from fmlib.models.tasks import TaskManager
+from fmlib.models.timetable import Timetable
 from pymodm import fields, MongoModel, EmbeddedMongoModel
 from pymodm.errors import DoesNotExist
 
@@ -28,6 +30,7 @@ class TaskPerformance(MongoModel):
     task_id = fields.UUIDField(primary_key=True, required=True)
     allocation = fields.EmbeddedDocumentField(Allocation)
     execution = fields.EmbeddedDocumentField(Execution)
+
     objects = TaskManager()
 
     class Meta:
@@ -86,3 +89,39 @@ class TaskPerformance(MongoModel):
                 if bid.round_id == round_id:
                     bids.append(bid)
         return bids
+
+
+class RobotPerformance(MongoModel):
+    robot_id = fields.IntegerField(primary_key=True)
+    timetables = fields.EmbeddedDocumentListField(Timetable)
+
+    objects = RobotManager()
+
+    class Meta:
+        ignore_unknown_fields = True
+        meta_model = "robot-performance"
+
+    @property
+    def meta_model(self):
+        return self.Meta.meta_model
+
+    @classmethod
+    def create_new(cls, robot_id):
+        performance = cls(robot_id=robot_id)
+        performance.save()
+        return performance
+
+    def update_timetables(self, timetable):
+        if not self.timetables:
+            self.timetables = list()
+        timetable_model = timetable.to_model()
+        self.timetables.append(timetable_model)
+        self.save()
+
+    @classmethod
+    def get_robot(cls, robot_id):
+        try:
+            return cls.objects.get_robot(robot_id)
+        except DoesNotExist:
+            return cls.create_new(robot_id)
+
