@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from fmlib.models import requests
 from fmlib.models.actions import Action, ActionProgress, Duration
+from fmlib.models.timetable import Timetable
 from fmlib.utils.messages import Document
 from fmlib.utils.messages import Message
 from pymodm import EmbeddedMongoModel, fields, MongoModel
@@ -151,9 +152,7 @@ class Task(MongoModel):
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
     constraints = fields.EmbeddedDocumentField(TaskConstraints)
-    departure_time = fields.DateTimeField()
-    start_time = fields.DateTimeField()
-    finish_time = fields.DateTimeField()
+    scheduled_time = fields.EmbeddedDocumentField(TimepointConstraint)
 
     objects = TaskManager()
 
@@ -177,10 +176,32 @@ class Task(MongoModel):
                                         latest_time=datetime.now() + timedelta(minutes=1))
             temporal = TemporalConstraints(start=start, duration=Duration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
+        kwargs.update(scheduled_time=TimepointConstraint())
         task = cls(**kwargs)
         task.save()
         task.update_status(TaskStatusConst.UNALLOCATED)
         return task
+
+    @property
+    def departure_time(self):
+        if self.assigned_robots:
+            robot_id = self.assigned_robots[0]
+            timetable = Timetable.get_timetable(robot_id)
+            return timetable.get_time(self.task_id, "departure")
+
+    @property
+    def start_time(self):
+        if self.assigned_robots:
+            robot_id = self.assigned_robots[0]
+            timetable = Timetable.get_timetable(robot_id)
+            return timetable.get_time(self.task_id, "start")
+
+    @property
+    def finish_time(self):
+        if self.assigned_robots:
+            robot_id = self.assigned_robots[0]
+            timetable = Timetable.get_timetable(robot_id)
+            return timetable.get_time(self.task_id, "finish")
 
     @classmethod
     def from_payload(cls, payload, save_in_db=True):
@@ -306,20 +327,15 @@ class Task(MongoModel):
         self.update_status(TaskStatusConst.PLANNED)
         self.save()
 
-    def update_schedule(self, schedule):
-        if schedule.get("departure_time"):
-            self.departure_time = schedule["departure_time"]
-        if schedule.get("start_time"):
-            self.start_time = schedule['start_time']
-        if schedule.get("finish_time"):
-            self.finish_time = schedule['finish_time']
+    def schedule(self, earliest_time, latest_time):
+        self.update_status(TaskStatusConst.SCHEDULED)
+        self.scheduled_time.update(earliest_time, latest_time)
         self.save()
 
     def is_executable(self):
         current_time = TimeStamp()
-        departure_time = TimeStamp.from_datetime(self.departure_time)
-
-        if departure_time < current_time:
+        earliest_time = TimeStamp.from_datetime(self.scheduled_time.earliest_time)
+        if earliest_time < current_time:
             return True
         else:
             return False
