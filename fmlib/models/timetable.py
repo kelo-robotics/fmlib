@@ -8,6 +8,9 @@ from pymodm import fields, MongoModel
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
+from fmlib.utils.messages import MessageFactory
+
+mf = MessageFactory()
 
 
 class TimetableQuerySet(QuerySet):
@@ -33,12 +36,21 @@ class Timetable(MongoModel):
     class Meta:
         archive_collection = 'timetable_archive'
         ignore_unknown_fields = True
+        meta_model = "timetable"
+
+    @property
+    def meta_model(self):
+        return self.Meta.meta_model
 
     def save(self):
         try:
             super().save(cascade=True)
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
+
+    def publish(self, api):
+        msg = mf.create_message(self)
+        api.publish(msg, groups=["ROPOD"])
 
     @classmethod
     def get_timetable(cls, robot_id):
