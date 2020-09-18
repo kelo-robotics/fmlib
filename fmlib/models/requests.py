@@ -212,7 +212,7 @@ class NavigationRequest(TaskRequest):
         return dict_repr
 
 
-class CoverageRequest(TaskRequest):
+class DisinfectionRequest(TaskRequest):
     area = fields.CharField()
     start_location = fields.CharField()
     finish_location = fields.CharField()
@@ -224,7 +224,7 @@ class CoverageRequest(TaskRequest):
         archive_collection = TaskRequest.Meta.archive_collection
         ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
         meta_model = TaskRequest.Meta.meta_model
-        task_type = "CoverageTask"
+        task_type = "DisinfectionTask"
 
     def get_velocity(self):
         """ Returns max velocity (m/s) based on the dose """

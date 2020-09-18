@@ -430,8 +430,8 @@ class NavigationTask(Task):
         return task
 
 
-class CoverageTask(Task):
-    request = fields.EmbeddedDocumentField(requests.CoverageRequest)
+class DisinfectionTask(Task):
+    request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
 
     objects = TaskManager()
 
