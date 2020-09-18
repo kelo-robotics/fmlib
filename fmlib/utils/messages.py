@@ -88,6 +88,11 @@ class Message(dict):
         else:
             return None
 
+    @type.setter
+    def type(self, msg_type):
+        if self.get('header'):
+            self['header']['type'] = msg_type
+
     @property
     def payload(self):
         return self.get('payload')
