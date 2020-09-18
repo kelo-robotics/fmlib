@@ -8,6 +8,7 @@ from fmlib.models.actions import Action, ActionProgress, Duration
 from fmlib.models.timetable import Timetable
 from fmlib.utils.messages import Document
 from fmlib.utils.messages import Message
+from fmlib.utils.messages import MessageFactory
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
@@ -16,6 +17,8 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
+
+mf = MessageFactory()
 
 
 class TaskQuerySet(QuerySet):
@@ -167,6 +170,11 @@ class Task(MongoModel):
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
 
+    def publish_task_update(self):
+        msg = mf.create_message(self)
+        msg.type = "TASK-UPDATE"
+        self.api.publish(msg, groups=['ROPOD'])
+
     @classmethod
     def create_new(cls, **kwargs):
         if 'task_id' not in kwargs.keys():
@@ -226,7 +234,7 @@ class Task(MongoModel):
             dict_repr["departure_time"] = self.departure_time.isoformat()
         if dict_repr.get("finish_time"):
             dict_repr["finish_time"] = self.finish_time.isoformat()
-
+        dict_repr["status"] = self.status.status
         return dict_repr
 
     def to_msg(self):
@@ -234,7 +242,7 @@ class Task(MongoModel):
         return msg
 
     @classmethod
-    def from_request(cls, request):
+    def from_request(cls, request, **kwargs):
         constraints = TaskConstraints(hard=request.hard_constraints)
         task = cls.create_new(request=request, constraints=constraints)
         return task
@@ -314,11 +322,13 @@ class Task(MongoModel):
         if save_in_db:
             self.save()
             self.update_status(TaskStatusConst.ALLOCATED)
+        self.publish_task_update()
 
     def unassign_robots(self):
         self.assigned_robots = list()
         self.plan[0].robot = None
         self.save()
+        self.publish_task_update()
 
     def update_plan(self, task_plan):
         # Adds the section of the plan that is independent from the robot,
@@ -326,11 +336,13 @@ class Task(MongoModel):
         self.plan.append(task_plan)
         self.update_status(TaskStatusConst.PLANNED)
         self.save()
+        self.publish_task_update()
 
     def schedule(self, earliest_time, latest_time):
         self.update_status(TaskStatusConst.SCHEDULED)
         self.scheduled_time.update(earliest_time, latest_time)
         self.save()
+        self.publish_task_update()
 
     def is_executable(self):
         current_time = TimeStamp()
@@ -404,13 +416,17 @@ class TransportationTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request):
+    def from_request(cls, request, **kwargs):
+        api = kwargs.pop("api")
         pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time,
                                      latest_time=request.latest_pickup_time)
         temporal = TemporalConstraints(start=pickup,
                                        duration=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints)
+        if api:
+            task.api = api
+            task.publish_task_update()
         return task
 
 
@@ -420,13 +436,17 @@ class NavigationTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request):
+    def from_request(cls, request, **kwargs):
+        api = kwargs.pop("api")
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
                                       latest_time=request.latest_arrival_time)
         temporal = TemporalConstraints(start=arrival,
                                        duration=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints)
+        if api:
+            task.api = api
+            task.publish_task_update()
         return task
 
 
@@ -436,13 +456,17 @@ class DisinfectionTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request):
+    def from_request(cls, request, **kwargs):
+        api = kwargs.pop("api")
         start = TimepointConstraint(earliest_time=request.earliest_start_time,
                                     latest_time=request.latest_start_time)
         temporal = TemporalConstraints(start=start,
                                        duration=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints)
+        if api:
+            task.api = api
+            task.publish_task_update()
         return task
 
 
