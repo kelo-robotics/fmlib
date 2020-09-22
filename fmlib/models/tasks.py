@@ -452,6 +452,27 @@ class NavigationTask(Task):
         return task
 
 
+class GuidanceTask(Task):
+    request = fields.EmbeddedDocumentField(requests.GuidanceRequest)
+    capabilities = fields.ListField(default=["navigation", "guidance"])
+
+    objects = TaskManager()
+
+    @classmethod
+    def from_request(cls, request, **kwargs):
+        api = kwargs.pop("api")
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
+                                      latest_time=request.latest_arrival_time)
+        temporal = TemporalConstraints(start=arrival,
+                                       duration=Duration())
+        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        task = cls.create_new(request=request, constraints=constraints)
+        if api:
+            task.api = api
+            task.publish_task_update()
+        return task
+
+
 class DisinfectionTask(Task):
     request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
     capabilities = fields.ListField(default=["navigation", "uvc-radiation"])

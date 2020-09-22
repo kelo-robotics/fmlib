@@ -58,6 +58,14 @@ class TaskRequest(Request):
         dict_repr["request_id"] = str(dict_repr.pop('_id'))
         return dict_repr
 
+    def validate_request(self, path_planner):
+        if self.latest_start_time < datetime.now():
+            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_arrival_time)
+        elif not path_planner.is_valid_location(self.start_location):
+            raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
+        elif not path_planner.is_valid_location(self.finish_location):
+            raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
+
 
 class TasksRequest(Request):
     requests = fields.EmbeddedDocumentListField(TaskRequest)
@@ -148,15 +156,14 @@ class TransportationRequest(TaskRequest):
     def earliest_start_time(self):
         return self.earliest_pickup_time
 
+    @property
+    def latest_start_time(self):
+        return self.latest_start_time
+
     def validate_request(self, path_planner):
+        super().validate_request(path_planner)
         if self.pickup_location == self.delivery_location:
             raise InvalidRequestLocation("Pickup and delivery location are the same")
-        elif self.latest_pickup_time < datetime.now():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_pickup_time)
-        elif not path_planner.is_valid_location(self.pickup_location, behaviour="docking"):
-            raise InvalidRequestLocation("%s is not a valid pickup area." % self.pickup_location)
-        elif not path_planner.is_valid_location(self.delivery_location, behaviour="undocking"):
-            raise InvalidRequestLocation("%s is not a valid delivery area." % self.delivery_location)
 
     def to_dict(self):
         dict_repr = super().to_dict()
@@ -167,6 +174,8 @@ class TransportationRequest(TaskRequest):
 
 class NavigationRequest(TaskRequest):
 
+    start_location = fields.CharField()
+    start_location_level = fields.IntegerField()
     goal_location = fields.CharField()
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.DateTimeField()
@@ -180,16 +189,8 @@ class NavigationRequest(TaskRequest):
         task_type = "NavigationTask"
 
     @property
-    def start_location(self):
-        return self.goal_location
-
-    @property
     def finish_location(self):
         return self.goal_location
-
-    @property
-    def start_location_level(self):
-        return self.goal_location_level
 
     @property
     def finish_location_level(self):
@@ -199,17 +200,24 @@ class NavigationRequest(TaskRequest):
     def earliest_start_time(self):
         return self.earliest_arrival_time
 
-    def validate_request(self, path_planner):
-        if self.latest_arrival_time < datetime.now():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_pickup_time)
-        elif not path_planner.is_valid_location(self.goal_location, behaviour="docking"):
-            raise InvalidRequestLocation("%s is not a valid goal location." % self.pickup_location)
+    @property
+    def latest_start_time(self):
+        return self.latest_arrival_time
 
     def to_dict(self):
         dict_repr = super().to_dict()
         dict_repr["earliest_arrival_time"] = self.earliest_arrival_time.isoformat()
         dict_repr["latest_arrival_time"] = self.latest_arrival_time.isoformat()
         return dict_repr
+
+
+class GuidanceRequest(NavigationRequest):
+
+    class Meta:
+        archive_collection = TaskRequest.Meta.archive_collection
+        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
+        meta_model = TaskRequest.Meta.meta_model
+        task_type = "GuidanceTask"
 
 
 class DisinfectionRequest(TaskRequest):
@@ -240,11 +248,9 @@ class DisinfectionRequest(TaskRequest):
         return velocity
 
     def validate_request(self, path_planner):
-        if self.latest_start_time < datetime.now():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
-        elif not path_planner.is_valid_area(self.area):
+        super().validate_request(path_planner)
+        if not path_planner.is_valid_area(self.area):
             raise InvalidRequestArea("%s is not a valid area." % self.area)
-        # TODO: validate area
 
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
