@@ -158,7 +158,7 @@ class TransportationRequest(TaskRequest):
 
     @property
     def latest_start_time(self):
-        return self.latest_start_time
+        return self.latest_pickup_time
 
     def validate_request(self, path_planner):
         super().validate_request(path_planner)
