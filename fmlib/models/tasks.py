@@ -412,6 +412,7 @@ class Task(MongoModel):
 
 class TransportationTask(Task):
     request = fields.EmbeddedDocumentField(requests.TransportationRequest)
+    capabilities = fields.ListField(default=["navigation", "docking"])
 
     objects = TaskManager()
 
@@ -432,6 +433,7 @@ class TransportationTask(Task):
 
 class NavigationTask(Task):
     request = fields.EmbeddedDocumentField(requests.NavigationRequest)
+    capabilities = fields.ListField(default=["navigation"])
 
     objects = TaskManager()
 
@@ -452,6 +454,7 @@ class NavigationTask(Task):
 
 class DisinfectionTask(Task):
     request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
+    capabilities = fields.ListField(default=["navigation", "uvc-radiation"])
 
     objects = TaskManager()
 
