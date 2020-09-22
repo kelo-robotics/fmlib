@@ -106,6 +106,7 @@ class Robot(MongoModel):
     version = fields.EmbeddedDocumentField(Version)
     status = fields.EmbeddedDocumentField(RobotStatus)
     position = fields.EmbeddedDocumentField(Position)
+    capabilities = fields.ListField(default=["navigation"])
 
     objects = RobotManager()
 
