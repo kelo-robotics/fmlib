@@ -277,6 +277,11 @@ class Task(MongoModel):
     def travel_time(self):
         return self.constraints.temporal.travel_time
 
+    @travel_time.setter
+    def travel_time(self, travel_time):
+        self.constraints.temporal.travel_time = travel_time
+        self.save()
+
     def update_work_time(self, mean, variance, save_in_db=True):
         self.work_time.update(mean, variance)
         if save_in_db:
@@ -339,6 +344,7 @@ class Task(MongoModel):
 
     def unassign_robots(self):
         self.assigned_robots = list()
+        self.travel_time = Duration()
         self.plan[0].robot = None
         self.save()
         self.publish_task_update()
