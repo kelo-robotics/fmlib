@@ -42,8 +42,8 @@ class Duration(EmbeddedMongoModel):
         return dict_repr
 
     def update(self, mean, variance):
-        self.mean = mean
-        self.variance = variance
+        self.mean = round(mean, 3)
+        self.variance = round(variance, 3)
 
 
 class Action(MongoModel, EmbeddedMongoModel):
