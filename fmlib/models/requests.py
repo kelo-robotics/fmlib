@@ -254,7 +254,7 @@ class DisinfectionRequest(TaskRequest):
 
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
-        self.finish_location = self.start_location
+        self.finish_location = path_planner.get_finish_location(self.area)
         self.save()
 
     def to_dict(self):
