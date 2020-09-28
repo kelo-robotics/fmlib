@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from fmlib.models import requests
 from fmlib.models.actions import Action, ActionProgress, Duration
+from fmlib.models.environment import Position
 from fmlib.models.timetable import Timetable
 from fmlib.utils.messages import Document
 from fmlib.utils.messages import Message
@@ -328,7 +329,7 @@ class Task(MongoModel):
         if status in [TaskStatusConst.COMPLETED,
                       TaskStatusConst.CANCELED,
                       TaskStatusConst.ABORTED,
-                      TaskStatusConst.PREEMPTED]:
+                      TaskStatusConst.FAILED]:
             task_status.archive()
             self.archive()
 
@@ -390,16 +391,45 @@ class Task(MongoModel):
 
     @property
     def status(self):
-        return TaskStatus.objects.get({"_id": self.task_id})
+        return self.get_task_status(self.task_id)
 
     @classmethod
     def get_task(cls, task_id):
-        return cls.objects.get_task(task_id)
+        try:
+            return cls.objects.get_task(task_id)
+        except DoesNotExist:
+            try:
+                with switch_collection(cls, cls.Meta.archive_collection):
+                    return cls.objects.get_task(task_id)
+            except DoesNotExist:
+                raise
 
+    @classmethod
+    def get_task_from_request(cls, request_id):
+        if isinstance(request_id, str):
+            request_id = uuid.UUID(request_id)
+
+        tasks = cls.objects.all()
+        for task in tasks:
+            if task.request.request_id == request_id:
+                return task
+
+        with switch_collection(cls, cls.Meta.archive_collection):
+            tasks = cls.objects.all()
+            for task in tasks:
+                if task.request.request_id == request_id:
+                    return task
 
     @staticmethod
     def get_task_status(task_id):
-        return TaskStatus.objects.get({'_id': task_id})
+        try:
+            return TaskStatus.objects.get({'_id': task_id})
+        except DoesNotExist:
+            try:
+                with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
+                    return TaskStatus.objects.get({'_id': task_id})
+            except DoesNotExist:
+                raise
 
 
     @staticmethod
@@ -424,9 +454,9 @@ class Task(MongoModel):
 
         return tasks
 
-    def update_progress(self, action_id, action_status, **kwargs):
+    def update_progress(self, action_id, action_status, robot_pose, **kwargs):
         status = TaskStatus.objects.get({"_id": self.task_id})
-        status.update_progress(action_id, action_status, **kwargs)
+        status.update_progress(action_id, action_status, robot_pose, **kwargs)
 
 
 class TransportationTask(Task):
@@ -520,12 +550,14 @@ class DisinfectionTask(Task):
 class TaskProgress(EmbeddedMongoModel):
 
     current_action = fields.ReferenceField(Action)
+    current_pose = fields.EmbeddedDocumentField(Position)
     actions = fields.EmbeddedDocumentListField(ActionProgress)
 
     class Meta:
         ignore_unknown_fields = True
 
-    def update(self, action_id, action_status, **kwargs):
+    def update(self, action_id, action_status, robot_pose, **kwargs):
+        self.current_pose = robot_pose
         if action_status == ActionStatus.COMPLETED:
             self.current_action = self._get_next_action(action_id).action.action_id \
                 if self._get_next_action(action_id) is not None else self.current_action
@@ -594,11 +626,11 @@ class TaskStatus(MongoModel):
             super().save()
         self.delete()
 
-    def update_progress(self, action_id, action_status, **kwargs):
+    def update_progress(self, action_id, action_status, robot_pose, **kwargs):
         self.refresh_from_db()
         if not self.progress:
             self.progress = TaskProgress()
             self.progress.initialize(action_id, self.task.plan)
             self.save()
-        self.progress.update(action_id, action_status, **kwargs)
+        self.progress.update(action_id, action_status, robot_pose, **kwargs)
         self.save(cascade=True)
