@@ -5,7 +5,6 @@ send messages through the network using a variety of middlewares
 import logging
 
 from fmlib.api.rest.interface import RESTInterface
-from fmlib.api.ros import ROSInterface
 from fmlib.api.zyre import ZyreInterface
 from fmlib.utils.messages import MessageFactory
 
@@ -78,8 +77,6 @@ class API:
             interface = None
             if option == 'zyre':
                 interface = self.get_zyre_api(config)
-            elif option == 'ros':
-                interface = self.get_ros_api(config)
             elif option == 'rest':
                 interface = self.get_rest_api(config)
 
@@ -103,18 +100,6 @@ class API:
         """
         zyre_api = ZyreInterface(**zyre_config)
         return zyre_api
-
-    @classmethod
-    def get_ros_api(cls, ros_config):
-        """Create an object of type ROSInterface
-
-        Args:
-            ros_config: A dictionary containing the API configuration
-
-        Returns:
-            A configured ROSInterface object
-        """
-        return ROSInterface(**ros_config)
 
     @classmethod
     def get_rest_api(cls, rest_config):
