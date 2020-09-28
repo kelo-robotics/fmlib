@@ -1,20 +1,49 @@
 import logging
 import sys
+import uuid
 from datetime import datetime
 
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
 from pymodm import MongoModel, fields
+from pymodm.manager import Manager
+from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
 
 this_module = sys.modules[__name__]
 
 
+class RequestQuerySet(QuerySet):
+    def get_request(self, request_id):
+        if isinstance(request_id, str):
+            request_id = uuid.UUID(request_id)
+        return self.get({'_id': request_id})
+
+
+RequestManager = Manager.from_queryset(RequestQuerySet)
+
+
 class Request(MongoModel):
+    """
+    request_id: Uniquely identifies this request
+    user_id: Uniquely identifies the user that made the request
+    parent_request_id (optional): Indicates that this request was originated from a previous one, which task was not
+                                completed.
+                                Possible reasons:
+                                - the task failed during execution
+                                - the user modified the original request
+    """
 
     request_id = fields.UUIDField(primary_key=True)
     user_id = fields.ReferenceField(User)
+    parent_request_id = fields.UUIDField(blank=True)
+
+    objects = RequestManager()
+
+    @classmethod
+    def get_request(cls, request_id):
+        return cls.objects.get_request(request_id)
 
 
 class TaskRequest(Request):
@@ -38,6 +67,14 @@ class TaskRequest(Request):
             super().save(cascade=True)
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
+
+    @classmethod
+    def create_new(cls, **kwargs):
+        if 'request_id' not in kwargs.keys():
+            kwargs.update(request_id=uuid.uuid4())
+        request = cls(**kwargs)
+        request.save()
+        return request
 
     @classmethod
     def from_payload(cls, payload, save=True):
@@ -262,6 +299,17 @@ class DisinfectionRequest(TaskRequest):
         dict_repr["earliest_start_time"] = self.earliest_start_time.isoformat()
         dict_repr["latest_start_time"] = self.latest_start_time.isoformat()
         return dict_repr
+
+    def from_parent_request(self, **kwargs):
+        attrs = ["user_id", "priority", "hard_constraints", "eligible_robots",
+                 "area", "start_location", "finish_location", "earliest_start_time",
+                 "latest_start_time", "dose"]
+        for attr in attrs:
+            if attr not in kwargs:
+                kwargs[attr] = getattr(self, attr)
+        kwargs.update(parent_request_id=self.request_id)
+        request = self.create_new(**kwargs)
+        return request
 
 
 class InvalidRequest(Exception):
