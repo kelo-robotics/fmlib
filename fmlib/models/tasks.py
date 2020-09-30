@@ -407,6 +407,8 @@ class Task(MongoModel):
 
     @staticmethod
     def get_task_status(task_id):
+        if isinstance(task_id, str):
+            task_id = uuid.UUID(task_id)
         try:
             return TaskStatus.objects.get({'_id': task_id})
         except DoesNotExist:
