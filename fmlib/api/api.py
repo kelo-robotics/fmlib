@@ -168,6 +168,9 @@ class API:
     def create_message(self, model):
         return self._mf.create_message(model)
 
+    def create_header(self, message_type, **kwargs):
+        return self._mf.create_header(message_type, **kwargs)
+
 
 def _get_callback_function(obj, component):
     objects = component.split('.')

@@ -43,6 +43,7 @@ class TaskRequest(EmbeddedMongoModel):
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
+    valid = fields.BooleanField()
 
     class Meta:
         ignore_unknown_fields = True
@@ -89,6 +90,10 @@ class TaskRequests(Request):
 
     def update_task_id(self, request, task_id):
         request.task_id = task_id
+        self.save()
+
+    def mark_as_invalid(self, request):
+        request.valid = False
         self.save()
 
     @property
@@ -251,9 +256,11 @@ class DisinfectionRequest(TaskRequest):
         return velocity
 
     def validate_request(self, path_planner):
-        super().validate_request(path_planner)
         if not path_planner.is_valid_area(self.area):
             raise InvalidRequestArea("%s is not a valid area." % self.area)
+        if not self.parent_task_id:
+            self.complete_request(path_planner)
+        super().validate_request(path_planner)
 
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
