@@ -5,7 +5,7 @@ from datetime import datetime
 
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
-from pymodm import MongoModel, fields
+from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
@@ -25,74 +25,46 @@ RequestManager = Manager.from_queryset(RequestQuerySet)
 
 
 class Request(MongoModel):
-    """
-    request_id: Uniquely identifies this request
-    user_id: Uniquely identifies the user that made the request
-    parent_request_id (optional): Indicates that this request was originated from a previous one, which task was not
-                                completed.
-                                Possible reasons:
-                                - the task failed during execution
-                                - the user modified the original request
-    """
-
     request_id = fields.UUIDField(primary_key=True)
     user_id = fields.ReferenceField(User)
-    parent_request_id = fields.UUIDField(blank=True)
 
     objects = RequestManager()
 
     @classmethod
     def get_request(cls, request_id):
+        if isinstance(request_id, str):
+            request_id = uuid.UUID(request_id)
         return cls.objects.get_request(request_id)
 
 
-class TaskRequest(Request):
-
+class TaskRequest(EmbeddedMongoModel):
+    task_id = fields.UUIDField(blank=True)
+    parent_task_id = fields.UUIDField(blank=True)  # Indicates that this request was originated from an uncompleted task
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
 
     class Meta:
-        archive_collection = 'task_request_archive'
         ignore_unknown_fields = True
-        meta_model = "task-request"
         task_type = "Task"
 
     @property
     def task_type(self):
         return self.Meta.task_type
 
-    def save(self):
-        try:
-            super().save(cascade=True)
-        except ServerSelectionTimeoutError:
-            logging.warning('Could not save models to MongoDB')
-
     @classmethod
     def create_new(cls, **kwargs):
-        if 'request_id' not in kwargs.keys():
-            kwargs.update(request_id=uuid.uuid4())
         request = cls(**kwargs)
-        request.save()
         return request
 
     @classmethod
-    def from_payload(cls, payload, save=True):
+    def from_payload(cls, payload):
         document = Document.from_payload(payload)
-        document['_id'] = document.pop('request_id')
-        document['user_id'] = User(user_id=document.pop('user_id'))
         request = cls.from_document(document)
-        if save:
-            request.save()
         return request
-
-    @property
-    def meta_model(self):
-        return self.Meta.meta_model
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
-        dict_repr["request_id"] = str(dict_repr.pop('_id'))
         return dict_repr
 
     def validate_request(self, path_planner):
@@ -104,14 +76,20 @@ class TaskRequest(Request):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
 
 
-class TasksRequest(Request):
+class TaskRequests(Request):
     requests = fields.EmbeddedDocumentListField(TaskRequest)
 
+    objects = RequestManager()
+
     class Meta:
-        collection_name = "tasks_request"
-        archive_collection = 'tasks_request_archive'
+        collection_name = "task_request"
+        archive_collection = 'task_request_archive'
         ignore_unknown_fields = True
-        meta_model = "tasks-request"
+        meta_model = "task-request"
+
+    def update_task_id(self, request, task_id):
+        request.task_id = task_id
+        self.save()
 
     @property
     def meta_model(self):
@@ -125,11 +103,10 @@ class TasksRequest(Request):
 
     @classmethod
     def create_new(cls, **kwargs):
-        request_ids = [request.request_id for request in kwargs.get("requests")]
-        # All requests have the same request id
-        if len(set(request_ids)) == 1:
-            tasks_request = cls(request_id=request_ids[0], **kwargs)
-            return tasks_request
+        if "request_id" not in kwargs.keys():
+            kwargs.update(request_id=uuid.uuid4())
+        request = cls(**kwargs)
+        return request
 
     @classmethod
     def from_payload(cls, payload, save=True):
@@ -148,6 +125,7 @@ class TasksRequest(Request):
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
         dict_repr["request_id"] = str(dict_repr.pop('_id'))
         requests = list()
         for request in self.requests:
@@ -168,9 +146,6 @@ class TransportationRequest(TaskRequest):
     load_id = fields.CharField()
 
     class Meta:
-        archive_collection = TaskRequest.Meta.archive_collection
-        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
-        meta_model = TaskRequest.Meta.meta_model
         task_type = "TransportationTask"
 
     @property
@@ -220,9 +195,6 @@ class NavigationRequest(TaskRequest):
     wait_at_goal = fields.IntegerField()  # seconds
 
     class Meta:
-        archive_collection = TaskRequest.Meta.archive_collection
-        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
-        meta_model = TaskRequest.Meta.meta_model
         task_type = "NavigationTask"
 
     @property
@@ -251,9 +223,6 @@ class NavigationRequest(TaskRequest):
 class GuidanceRequest(NavigationRequest):
 
     class Meta:
-        archive_collection = TaskRequest.Meta.archive_collection
-        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
-        meta_model = TaskRequest.Meta.meta_model
         task_type = "GuidanceTask"
 
 
@@ -266,9 +235,6 @@ class DisinfectionRequest(TaskRequest):
     dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
 
     class Meta:
-        archive_collection = TaskRequest.Meta.archive_collection
-        ignore_unknown_fields = TaskRequest.Meta.ignore_unknown_fields
-        meta_model = TaskRequest.Meta.meta_model
         task_type = "DisinfectionTask"
 
     def get_velocity(self):
@@ -292,7 +258,6 @@ class DisinfectionRequest(TaskRequest):
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
         self.finish_location = path_planner.get_finish_location(self.area)
-        self.save()
 
     def to_dict(self):
         dict_repr = super().to_dict()
@@ -300,14 +265,14 @@ class DisinfectionRequest(TaskRequest):
         dict_repr["latest_start_time"] = self.latest_start_time.isoformat()
         return dict_repr
 
-    def from_parent_request(self, **kwargs):
-        attrs = ["user_id", "priority", "hard_constraints", "eligible_robots",
+    def from_task(self, task, **kwargs):
+        attrs = ["priority", "hard_constraints", "eligible_robots",
                  "area", "start_location", "finish_location", "earliest_start_time",
                  "latest_start_time", "dose"]
         for attr in attrs:
             if attr not in kwargs:
                 kwargs[attr] = getattr(self, attr)
-        kwargs.update(parent_request_id=self.request_id)
+        kwargs.update(parent_task_id=task.task_id)
         request = self.create_new(**kwargs)
         return request
 
