@@ -155,6 +155,7 @@ class TaskPlan(EmbeddedMongoModel):
 
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
+    parent_task_id = fields.UUIDField(blank=True)
     request = fields.EmbeddedDocumentField(requests.TaskRequest)
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
@@ -404,22 +405,6 @@ class Task(MongoModel):
             except DoesNotExist:
                 raise
 
-    @classmethod
-    def get_task_from_request(cls, request_id):
-        if isinstance(request_id, str):
-            request_id = uuid.UUID(request_id)
-
-        tasks = cls.objects.all()
-        for task in tasks:
-            if task.request.request_id == request_id:
-                return task
-
-        with switch_collection(cls, cls.Meta.archive_collection):
-            tasks = cls.objects.all()
-            for task in tasks:
-                if task.request.request_id == request_id:
-                    return task
-
     @staticmethod
     def get_task_status(task_id):
         try:
@@ -452,6 +437,22 @@ class Task(MongoModel):
         if robot_id:
             tasks = [task for task in tasks if robot_id in task.assigned_robots]
 
+        return tasks
+
+    @classmethod
+    def get_tasks_from_request(cls, request_id):
+        tasks = list()
+        task_requests = requests.TaskRequests.get_request(request_id)
+        for request in task_requests.requests:
+            tasks.append(cls.get_task(request.task_id))
+        return tasks
+
+    def get_parent_tasks(self, tasks):
+        if self.request.parent_task_id:
+            task = Task.get_task(self.request.parent_task_id)
+            tasks.append(task)
+            if task.request.parent_task_id:
+                task.get_parent_tasks(tasks)
         return tasks
 
     def update_progress(self, action_id, action_status, robot_pose, **kwargs):
