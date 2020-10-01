@@ -3,6 +3,7 @@ import sys
 import uuid
 from datetime import datetime
 
+import dateutil.parser
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
@@ -68,9 +69,9 @@ class TaskRequest(EmbeddedMongoModel):
         dict_repr = self.to_son().to_dict()
         return dict_repr
 
-    def validate_request(self, path_planner):
+    def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time < datetime.now():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_arrival_time)
+            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
         elif not path_planner.is_valid_location(self.start_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
         elif not path_planner.is_valid_location(self.finish_location):
@@ -177,8 +178,8 @@ class TransportationRequest(TaskRequest):
     def latest_start_time(self):
         return self.latest_pickup_time
 
-    def validate_request(self, path_planner):
-        super().validate_request(path_planner)
+    def validate_request(self, path_planner, complete_request=True):
+        super().validate_request(path_planner, complete_request)
         if self.pickup_location == self.delivery_location:
             raise InvalidRequestLocation("Pickup and delivery location are the same")
 
@@ -255,12 +256,12 @@ class DisinfectionRequest(TaskRequest):
             raise ValueError(self.dose)
         return velocity
 
-    def validate_request(self, path_planner):
+    def validate_request(self, path_planner, complete_request=True):
         if not path_planner.is_valid_area(self.area):
             raise InvalidRequestArea("%s is not a valid area." % self.area)
-        if not self.parent_task_id:
+        if complete_request:
             self.complete_request(path_planner)
-        super().validate_request(path_planner)
+        super().validate_request(path_planner, complete_request)
 
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
@@ -273,10 +274,13 @@ class DisinfectionRequest(TaskRequest):
         return dict_repr
 
     def from_task(self, task, **kwargs):
-        attrs = ["priority", "hard_constraints", "eligible_robots",
-                 "area", "start_location", "finish_location", "earliest_start_time",
-                 "latest_start_time", "dose"]
-        for attr in attrs:
+        if "earliest_start_time" in kwargs:
+            kwargs["earliest_start_time"] = dateutil.parser.parse(kwargs.pop("earliest_start_time"))
+
+        if "latest_start_time" in kwargs:
+            kwargs["latest_start_time"] = dateutil.parser.parse(kwargs.pop("latest_start_time"))
+
+        for attr in self.__dict__['_data'].__dict__['_members']:
             if attr not in kwargs:
                 kwargs[attr] = getattr(self, attr)
         kwargs.update(parent_task_id=task.task_id)
