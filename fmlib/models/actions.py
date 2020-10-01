@@ -136,6 +136,14 @@ class WallFollowing(Action):
     velocity = fields.FloatField()
 
 
+class SwitchOnLamp(Action):
+    pass
+
+
+class SwitchOffLamp(Action):
+    pass
+
+
 class ActionProgress(EmbeddedMongoModel):
     action = fields.ReferenceField(Action)
     status = fields.IntegerField(default=ActionStatus.PLANNED)
