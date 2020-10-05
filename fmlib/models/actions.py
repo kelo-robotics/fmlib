@@ -126,7 +126,7 @@ class Navigation(Action):
     velocity = fields.FloatField()
 
 
-class StandStill(Action):
+class Standstill(Action):
     pass
 
 
@@ -134,6 +134,10 @@ class WallFollowing(Action):
     checkpoints = fields.EmbeddedDocumentListField(Position)
     polygon = fields.EmbeddedDocumentListField(Position)
     velocity = fields.FloatField()
+
+
+class LampControl(Action):
+    switch_on = fields.BooleanField()
 
 
 class ActionProgress(EmbeddedMongoModel):

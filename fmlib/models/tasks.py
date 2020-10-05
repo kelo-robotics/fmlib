@@ -421,8 +421,12 @@ class Task(MongoModel):
 
     @staticmethod
     def get_tasks_by_status(status):
-        return [status.task for status in TaskStatus.objects.by_status(status)]
-
+        tasks_by_status = [status.task for status in TaskStatus.objects.by_status(status)]
+        with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
+            status = [status for status in TaskStatus.objects.by_status(status)]
+            with switch_collection(Task, Task.Meta.archive_collection):
+                tasks_by_status.extend([s.task for s in status])
+        return tasks_by_status
 
     @classmethod
     def get_tasks_by_robot(cls, robot_id):
