@@ -59,9 +59,9 @@ class Timetable(MongoModel):
     def get_node_id(self, task_id, node_type):
         if isinstance(task_id, uuid.UUID):
             task_id = str(task_id)
-        for i, node in enumerate(self.dispatchable_graph["nodes"]):
+        for node in self.dispatchable_graph["nodes"]:
             if task_id == node["data"]["task_id"] and node_type == node["data"]["node_type"]:
-                return i
+                return node["id"]
 
     def get_time(self, task_id, node_type, lower_bound=True):
         time_ = None
