@@ -396,14 +396,12 @@ class Task(MongoModel):
 
     @classmethod
     def get_task(cls, task_id):
-        try:
+        return cls.objects.get_task(task_id)
+
+    @classmethod
+    def get_archived_task(cls, task_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
             return cls.objects.get_task(task_id)
-        except DoesNotExist:
-            try:
-                with switch_collection(cls, cls.Meta.archive_collection):
-                    return cls.objects.get_task(task_id)
-            except DoesNotExist:
-                raise
 
     @staticmethod
     def get_task_status(task_id):
@@ -418,7 +416,6 @@ class Task(MongoModel):
             except DoesNotExist:
                 raise
 
-
     @staticmethod
     def get_tasks_by_status(status):
         tasks_by_status = [status.task for status in TaskStatus.objects.by_status(status)]
@@ -431,7 +428,6 @@ class Task(MongoModel):
     @classmethod
     def get_tasks_by_robot(cls, robot_id):
         return [task for task in cls.objects.all() if robot_id in task.assigned_robots]
-
 
     @classmethod
     def get_tasks(cls, robot_id=None, status=None):
