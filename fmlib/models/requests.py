@@ -7,6 +7,7 @@ import dateutil.parser
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
+from pymodm.context_managers import switch_collection
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
@@ -77,6 +78,20 @@ class TaskRequest(EmbeddedMongoModel):
         elif not path_planner.is_valid_location(self.finish_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
 
+    @classmethod
+    def from_dict(cls, **kwargs):
+        return kwargs
+
+    def from_task(self, task, **kwargs):
+        kwargs = self.from_dict(**kwargs)
+
+        for attr in self.__dict__['_data'].__dict__['_members']:
+            if attr not in kwargs:
+                kwargs[attr] = getattr(self, attr)
+        kwargs.update(parent_task_id=task.task_id)
+        request = self.create_new(**kwargs)
+        return request
+
 
 class TaskRequests(Request):
     requests = fields.EmbeddedDocumentListField(TaskRequest)
@@ -85,6 +100,7 @@ class TaskRequests(Request):
 
     class Meta:
         collection_name = "task_request"
+        update_collection = "task_request_update"
         archive_collection = 'task_request_archive'
         ignore_unknown_fields = True
         meta_model = "task-request"
@@ -107,6 +123,10 @@ class TaskRequests(Request):
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
 
+    def save_update(self):
+        with switch_collection(self, TaskRequests.Meta.update_collection):
+            super().save()
+
     @classmethod
     def create_new(cls, **kwargs):
         if "request_id" not in kwargs.keys():
@@ -115,7 +135,7 @@ class TaskRequests(Request):
         return request
 
     @classmethod
-    def from_payload(cls, payload, save=True):
+    def from_payload(cls, payload, update=False):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('request_id')
         requests = list()
@@ -125,7 +145,9 @@ class TaskRequests(Request):
             requests.append(request_cls.from_payload(request))
         document['requests'] = requests
         tasks_request = cls.from_document(document)
-        if save:
+        if update:
+            tasks_request.save_update()
+        else:
             tasks_request.save()
         return tasks_request
 
@@ -162,6 +184,10 @@ class TransportationRequest(TaskRequest):
     def finish_location(self):
         return self.delivery_location
 
+    @finish_location.setter
+    def finish_location(self, location):
+        self.delivery_location = location
+
     @property
     def start_location_level(self):
         return self.pickup_location_level
@@ -189,6 +215,15 @@ class TransportationRequest(TaskRequest):
         dict_repr["latest_pickup_time"] = self.latest_pickup_time.isoformat()
         return dict_repr
 
+    @classmethod
+    def from_dict(cls, **kwargs):
+        if "earliest_pickup_time" in kwargs:
+            kwargs["earliest_pickup_time"] = dateutil.parser.parse(kwargs.pop("earliest_pickup_time"))
+
+        if "latest_pickup_time" in kwargs:
+            kwargs["latest_pickup_time"] = dateutil.parser.parse(kwargs.pop("latest_pickup_time"))
+        return kwargs
+
 
 class NavigationRequest(TaskRequest):
 
@@ -198,7 +233,7 @@ class NavigationRequest(TaskRequest):
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.DateTimeField()
     latest_arrival_time = fields.DateTimeField()
-    wait_at_goal = fields.IntegerField()  # seconds
+    wait_at_goal = fields.IntegerField(default=0)  # seconds
 
     class Meta:
         task_type = "NavigationTask"
@@ -206,6 +241,10 @@ class NavigationRequest(TaskRequest):
     @property
     def finish_location(self):
         return self.goal_location
+
+    @finish_location.setter
+    def finish_location(self, location):
+        self.goal_location = location
 
     @property
     def finish_location_level(self):
@@ -224,6 +263,15 @@ class NavigationRequest(TaskRequest):
         dict_repr["earliest_arrival_time"] = self.earliest_arrival_time.isoformat()
         dict_repr["latest_arrival_time"] = self.latest_arrival_time.isoformat()
         return dict_repr
+
+    @classmethod
+    def from_dict(cls, **kwargs):
+        if "earliest_arrival_time" in kwargs:
+            kwargs["earliest_arrival_time"] = dateutil.parser.parse(kwargs.pop("earliest_arrival_time"))
+
+        if "latest_arrival_time" in kwargs:
+            kwargs["latest_arrival_time"] = dateutil.parser.parse(kwargs.pop("latest_arrival_time"))
+        return kwargs
 
 
 class GuidanceRequest(NavigationRequest):
@@ -272,6 +320,15 @@ class DisinfectionRequest(TaskRequest):
         dict_repr["earliest_start_time"] = self.earliest_start_time.isoformat()
         dict_repr["latest_start_time"] = self.latest_start_time.isoformat()
         return dict_repr
+
+    @classmethod
+    def from_dict(cls, **kwargs):
+        if "earliest_start_time" in kwargs:
+            kwargs["earliest_start_time"] = dateutil.parser.parse(kwargs.pop("earliest_start_time"))
+
+        if "latest_start_time" in kwargs:
+            kwargs["latest_start_time"] = dateutil.parser.parse(kwargs.pop("latest_start_time"))
+        return kwargs
 
     def from_task(self, task, **kwargs):
         if "earliest_start_time" in kwargs:
