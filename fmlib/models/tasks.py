@@ -155,6 +155,7 @@ class TaskPlan(EmbeddedMongoModel):
 
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
+    type = fields.CharField()
     parent_task_id = fields.UUIDField(blank=True)
     request = fields.EmbeddedDocumentField(requests.TaskRequest)
     assigned_robots = fields.ListField(blank=True)
@@ -279,6 +280,14 @@ class Task(MongoModel):
     def travel_time(self):
         return self.constraints.temporal.travel_time
 
+    @property
+    def earliest_start_time(self):
+        return self.constraints.temporal.start.earliest_time
+
+    @property
+    def latest_start_time(self):
+        return self.constraints.temporal.start.latest_time
+
     @travel_time.setter
     def travel_time(self, travel_time):
         self.constraints.temporal.travel_time = travel_time
@@ -386,6 +395,16 @@ class Task(MongoModel):
             return True
         return False
 
+    def get_remaining_actions(self):
+        if not self.status.progress:
+            return self.plan[0].actions
+        else:
+            actions = list()
+            for action in self.status.progress.actions:
+                if action.status != ActionStatus.COMPLETED:
+                    actions.append(action)
+            return actions
+
     @property
     def meta_model(self):
         return self.Meta.meta_model
@@ -477,7 +496,7 @@ class TransportationTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints)
+        task = cls.create_new(type='transportation', request=request, constraints=constraints)
         if api:
             task.api = api
             task.publish_task_update()
@@ -499,7 +518,26 @@ class NavigationTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints)
+        task = cls.create_new(type='navigation', request=request, constraints=constraints)
+        if api:
+            task.api = api
+            task.publish_task_update()
+        return task
+
+
+class DefaultNavigationTask(NavigationTask):
+    """ Return to default waiting location
+    """
+    @classmethod
+    def from_request(cls, request, **kwargs):
+        api = kwargs.pop("api")
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
+                                      latest_time=request.latest_arrival_time)
+        temporal = TemporalConstraints(start=arrival,
+                                       work_time=Duration(),
+                                       travel_time=Duration())
+        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        task = cls.create_new(type='default_navigation', request=request, constraints=constraints)
         if api:
             task.api = api
             task.publish_task_update()
@@ -521,7 +559,7 @@ class GuidanceTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints)
+        task = cls.create_new(type='guidance', request=request, constraints=constraints)
         if api:
             task.api = api
             task.publish_task_update()
@@ -543,7 +581,7 @@ class DisinfectionTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints)
+        task = cls.create_new(type='disinfection', request=request, constraints=constraints)
         if api:
             task.api = api
             task.publish_task_update()
@@ -637,3 +675,4 @@ class TaskStatus(MongoModel):
             self.save()
         self.progress.update(action_id, action_status, robot_pose, **kwargs)
         self.save(cascade=True)
+
