@@ -400,9 +400,9 @@ class Task(MongoModel):
             return self.plan[0].actions
         else:
             actions = list()
-            for action in self.status.progress.actions:
-                if action.status != ActionStatus.COMPLETED:
-                    actions.append(action)
+            for action_progress in self.status.progress.actions:
+                if action_progress.status != ActionStatus.COMPLETED:
+                    actions.append(action_progress.action)
             return actions
 
     @property
