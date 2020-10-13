@@ -78,6 +78,10 @@ class TaskRequest(EmbeddedMongoModel):
         elif not path_planner.is_valid_location(self.finish_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
 
+    @staticmethod
+    def map_args(**kwargs):
+        return kwargs
+
     @classmethod
     def from_dict(cls, **kwargs):
         return kwargs
@@ -215,6 +219,14 @@ class TransportationRequest(TaskRequest):
         dict_repr["latest_pickup_time"] = self.latest_pickup_time.isoformat()
         return dict_repr
 
+    @staticmethod
+    def map_args(**kwargs):
+        map_keys = {'start_location': 'pickup_location',
+                    'earliest_start_time': 'earliest_pickup_time',
+                    'latest_start_time': 'latest_pickup_time'}
+        kwargs = {map_keys[key]: value for key, value in kwargs.items()}
+        return kwargs
+
     @classmethod
     def from_dict(cls, **kwargs):
         if "earliest_pickup_time" in kwargs:
@@ -263,6 +275,14 @@ class NavigationRequest(TaskRequest):
         dict_repr["earliest_arrival_time"] = self.earliest_arrival_time.isoformat()
         dict_repr["latest_arrival_time"] = self.latest_arrival_time.isoformat()
         return dict_repr
+
+    @staticmethod
+    def map_args(**kwargs):
+        map_keys = {'start_location': 'start_location',
+                    'earliest_start_time': 'earliest_arrival_time',
+                    'latest_start_time': 'latest_arrival_time'}
+        kwargs = {map_keys[key]: value for key, value in kwargs.items()}
+        return kwargs
 
     @classmethod
     def from_dict(cls, **kwargs):
@@ -329,20 +349,6 @@ class DisinfectionRequest(TaskRequest):
         if "latest_start_time" in kwargs:
             kwargs["latest_start_time"] = dateutil.parser.parse(kwargs.pop("latest_start_time"))
         return kwargs
-
-    def from_task(self, task, **kwargs):
-        if "earliest_start_time" in kwargs:
-            kwargs["earliest_start_time"] = dateutil.parser.parse(kwargs.pop("earliest_start_time"))
-
-        if "latest_start_time" in kwargs:
-            kwargs["latest_start_time"] = dateutil.parser.parse(kwargs.pop("latest_start_time"))
-
-        for attr in self.__dict__['_data'].__dict__['_members']:
-            if attr not in kwargs:
-                kwargs[attr] = getattr(self, attr)
-        kwargs.update(parent_task_id=task.task_id)
-        request = self.create_new(**kwargs)
-        return request
 
 
 class InvalidRequest(Exception):
