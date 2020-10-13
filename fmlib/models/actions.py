@@ -51,6 +51,7 @@ class Action(MongoModel, EmbeddedMongoModel):
     action_id = fields.UUIDField(primary_key=True)
     type = fields.CharField()
     duration = fields.EmbeddedDocumentField(Duration, blank=True)
+    pre_task_action = fields.BooleanField(default=False)
 
     objects = ActionManager()
 
@@ -77,6 +78,14 @@ class Action(MongoModel, EmbeddedMongoModel):
     @classmethod
     def get_action(cls, action_id):
         return cls.objects.get_action(action_id)
+
+    def from_action(self):
+        kwargs = dict()
+        for attr in self.__dict__['_data'].__dict__['_members']:
+            kwargs[attr] = getattr(self, attr)
+        kwargs.update(action_id=uuid.uuid4())
+        action = self.create_new(**kwargs)
+        return action
 
 
 class GoTo(Action):
