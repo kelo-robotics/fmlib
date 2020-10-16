@@ -177,12 +177,14 @@ class Task(MongoModel):
             logging.warning('Could not save models to MongoDB')
 
     def publish_task_update(self):
-        msg = mf.create_message(self)
-        msg.type = "TASK-UPDATE"
-        self.api.publish(msg, groups=['ROPOD'])
+        if hasattr(self, "api"):
+            msg = mf.create_message(self)
+            msg.type = "TASK-UPDATE"
+            self.api.publish(msg, groups=['ROPOD'])
 
     @classmethod
     def create_new(cls, **kwargs):
+        api = kwargs.pop("api")
         if 'task_id' not in kwargs.keys():
             kwargs.update(task_id=uuid.uuid4())
         elif 'constraints' not in kwargs.keys():
@@ -193,6 +195,8 @@ class Task(MongoModel):
         kwargs.update(scheduled_time=TimepointConstraint())
         task = cls(**kwargs)
         task.save()
+        if api:
+            task.api = api
         task.update_status(TaskStatusConst.UNALLOCATED)
         return task
 
@@ -342,6 +346,7 @@ class Task(MongoModel):
                       TaskStatusConst.FAILED]:
             task_status.archive()
             self.archive()
+        self.publish_task_update()
 
     def assign_robots(self, robot_ids, save_in_db=True,):
         self.assigned_robots = robot_ids
@@ -351,7 +356,6 @@ class Task(MongoModel):
         if save_in_db:
             self.save()
             self.update_status(TaskStatusConst.ALLOCATED)
-        self.publish_task_update()
 
     def unassign_robots(self):
         self.assigned_robots = list()
@@ -366,13 +370,11 @@ class Task(MongoModel):
         self.plan.append(task_plan)
         self.update_status(TaskStatusConst.PLANNED)
         self.save()
-        self.publish_task_update()
 
     def schedule(self, earliest_time, latest_time):
         self.update_status(TaskStatusConst.SCHEDULED)
         self.scheduled_time.update(earliest_time, latest_time)
         self.save()
-        self.publish_task_update()
 
     def is_executable(self):
         current_time = TimeStamp()
@@ -488,18 +490,14 @@ class TransportationTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request, **kwargs):
-        api = kwargs.pop("api")
+    def from_request(cls, request, api=None):
         pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time,
                                      latest_time=request.latest_pickup_time)
         temporal = TemporalConstraints(start=pickup,
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='transportation', request=request, constraints=constraints)
-        if api:
-            task.api = api
-            task.publish_task_update()
+        task = cls.create_new(type='transportation', request=request, constraints=constraints, api=api)
         return task
 
 
@@ -510,18 +508,14 @@ class NavigationTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request, **kwargs):
-        api = kwargs.pop("api")
+    def from_request(cls, request, api=None):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
                                       latest_time=request.latest_arrival_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='navigation', request=request, constraints=constraints)
-        if api:
-            task.api = api
-            task.publish_task_update()
+        task = cls.create_new(type='navigation', request=request, constraints=constraints, api=api)
         return task
 
 
@@ -529,18 +523,14 @@ class DefaultNavigationTask(NavigationTask):
     """ Return to default waiting location
     """
     @classmethod
-    def from_request(cls, request, **kwargs):
-        api = kwargs.pop("api")
+    def from_request(cls, request, api=None):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
                                       latest_time=request.latest_arrival_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='default_navigation', request=request, constraints=constraints)
-        if api:
-            task.api = api
-            task.publish_task_update()
+        task = cls.create_new(type='default_navigation', request=request, constraints=constraints, api=api)
         return task
 
 
@@ -551,18 +541,14 @@ class GuidanceTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request, **kwargs):
-        api = kwargs.pop("api")
+    def from_request(cls, request, api=None):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
                                       latest_time=request.latest_arrival_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='guidance', request=request, constraints=constraints)
-        if api:
-            task.api = api
-            task.publish_task_update()
+        task = cls.create_new(type='guidance', request=request, constraints=constraints, api=api)
         return task
 
 
@@ -573,18 +559,14 @@ class DisinfectionTask(Task):
     objects = TaskManager()
 
     @classmethod
-    def from_request(cls, request, **kwargs):
-        api = kwargs.pop("api")
+    def from_request(cls, request, api=None):
         start = TimepointConstraint(earliest_time=request.earliest_start_time,
                                     latest_time=request.latest_start_time)
         temporal = TemporalConstraints(start=start,
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='disinfection', request=request, constraints=constraints)
-        if api:
-            task.api = api
-            task.publish_task_update()
+        task = cls.create_new(type='disinfection', request=request, constraints=constraints, api=api)
         return task
 
 
