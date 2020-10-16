@@ -325,6 +325,8 @@ class DisinfectionRequest(TaskRequest):
         return velocity
 
     def validate_request(self, path_planner, complete_request=True):
+        if self.dose not in [DisinfectionDose.HIGH, DisinfectionDose.NORMAL, DisinfectionDose.LOW]:
+            raise InvalidRequest("%s is not a valid disinfection dose " % self.dose)
         if not path_planner.is_valid_area(self.area):
             raise InvalidRequestArea("%s is not a valid area." % self.area)
         if complete_request:
