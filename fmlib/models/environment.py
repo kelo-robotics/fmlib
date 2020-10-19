@@ -40,3 +40,9 @@ class Position(EmbeddedMongoModel):
     @property
     def meta_model(self):
         return self.Meta.meta_model
+
+
+class Checkpoint(Position):
+    visited = fields.BooleanField(default=False)
+
+

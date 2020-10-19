@@ -372,8 +372,8 @@ class Task(MongoModel):
         self.save()
 
     def schedule(self, earliest_time, latest_time):
-        self.update_status(TaskStatusConst.SCHEDULED)
         self.scheduled_time.update(earliest_time, latest_time)
+        self.update_status(TaskStatusConst.SCHEDULED)
         self.save()
 
     def is_executable(self):
