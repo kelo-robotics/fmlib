@@ -28,7 +28,10 @@ class TaskQuerySet(QuerySet):
         """Return a task object matching to a task_id.
         """
         if isinstance(task_id, str):
-            task_id = uuid.UUID(task_id)
+            try:
+                task_id = uuid.UUID(task_id)
+            except ValueError as e:
+                raise e
 
         return self.get({'_id': task_id})
 
