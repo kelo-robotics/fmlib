@@ -152,6 +152,15 @@ class Robot(MongoModel):
         self.status.availability.update_status(availability_status, current_task)
         self.save()
 
+    def is_capable(self, task):
+        return all(i in self.capabilities for i in task.capabilities)
+
+    def is_eligible(self, task):
+        if task.request.eligible_robots and self.is_capable(task)\
+                or not task.request.eligible_robots and self.is_capable(task):
+            return True
+        return False
+
     @classmethod
     def create_new(cls, robot_id, **kwargs):
         save_in_db = kwargs.pop("save_in_db", True)

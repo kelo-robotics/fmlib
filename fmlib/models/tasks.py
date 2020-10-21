@@ -165,6 +165,8 @@ class Task(MongoModel):
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
     constraints = fields.EmbeddedDocumentField(TaskConstraints)
     scheduled_time = fields.EmbeddedDocumentField(TimepointConstraint)
+    eligible_robots = fields.ListField(blank=True)
+    capable_robots = fields.ListField(blank=True)
 
     objects = TaskManager()
 
