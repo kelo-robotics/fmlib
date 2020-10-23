@@ -3,11 +3,13 @@ import uuid
 from datetime import timedelta
 
 import dateutil.parser
-from fmlib.utils.messages import Document
 from pymodm import fields, MongoModel
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
+
+from fmlib.utils.messages import Document
+from fmlib.utils.messages import Message
 from fmlib.utils.messages import MessageFactory
 
 mf = MessageFactory()
@@ -50,6 +52,13 @@ class Timetable(MongoModel):
 
     def publish(self, api):
         msg = mf.create_message(self)
+        api.publish(msg, groups=["ROPOD"])
+
+    @staticmethod
+    def publish_timetable_update(tasks, api):
+        header = mf.create_header("timetable-update")
+        payload = {"tasks": tasks}
+        msg = Message(payload, header)
         api.publish(msg, groups=["ROPOD"])
 
     @classmethod
