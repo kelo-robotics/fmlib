@@ -152,6 +152,11 @@ class MessageFactory:
         payload.update(metamodel=meta_model)
         return payload
 
+    @staticmethod
+    def create_payload_from_dict(payload_dict):
+        payload = format_msg(payload_dict)
+        return payload
+
     def create_header(self, message_type, **kwargs):
         meta_model = self.meta_model_template % 'msg'
         return Header(message_type.upper(), meta_model, **kwargs)
