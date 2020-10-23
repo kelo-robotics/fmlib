@@ -57,7 +57,7 @@ class Timetable(MongoModel):
     @staticmethod
     def publish_timetable_update(tasks, api):
         header = mf.create_header("timetable-update")
-        payload = {"tasks": tasks}
+        payload = mf.create_payload_from_dict({"tasks": tasks})
         msg = Message(payload, header)
         api.publish(msg, groups=["ROPOD"])
 
