@@ -64,6 +64,14 @@ class API:
             self.logger.debug('Using method %s to publish message using %s', method, option)
             getattr(self.__dict__[option], method)(msg, **kwargs)
 
+    def get_peer_directory(self):
+        for option in self.middleware_collection:
+            interface = self.__dict__[option]
+            if hasattr(interface, "peer_directory"):
+                return interface.peer_directory
+            else:
+                self.logger.warning("Option %s hast no peer_directory")
+
     def _configure(self, config_params):
         for option in self.middleware_collection:
             config = config_params.get(option, None)
