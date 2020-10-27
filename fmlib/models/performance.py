@@ -16,6 +16,7 @@ class BidPerformance(EmbeddedMongoModel):
 
 class Allocation(EmbeddedMongoModel):
     allocation_time = fields.DictField()
+    tasks_to_allocate = fields.DictField()
     n_re_allocation_attempts = fields.IntegerField(default=0)
     allocated = fields.BooleanField(default=False)
     bids = fields.EmbeddedDocumentListField(BidPerformance)
@@ -47,10 +48,11 @@ class TaskPerformance(MongoModel):
         performance.save()
         return performance
 
-    def update_allocation(self, round_id, allocation_time):
+    def update_allocation(self, round_id, allocation_time, tasks_to_allocate):
         if isinstance(round_id, uuid.UUID):
             round_id = str(round_id)
         self.allocation.allocation_time[round_id] = allocation_time
+        self.allocation.tasks_to_allocate[round_id] = tasks_to_allocate
         self.allocation.allocated = True
         self.save()
 
@@ -79,6 +81,10 @@ class TaskPerformance(MongoModel):
             return cls.objects.get_task(task_id)
         except DoesNotExist:
             return cls.create_new(task_id)
+
+    @classmethod
+    def get_tasks(cls):
+        return [task for task in cls.objects.all()]
 
     @classmethod
     def get_bids_by_round(cls, round_id):
