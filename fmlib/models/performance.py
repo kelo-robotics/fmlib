@@ -126,7 +126,7 @@ class RobotPerformance(MongoModel):
         timetable_model = timetable.to_model()
         self.timetables.append(timetable_model)
         tasks = timetable.get_tasks_for_timetable_update()
-        timetable_model.publish_timetable_update(tasks, self.api)
+        timetable_model.publish_timetable_update(timetable.robot_id, tasks, self.api)
         self.save()
 
     @classmethod

@@ -55,9 +55,9 @@ class Timetable(MongoModel):
         api.publish(msg, groups=["ROPOD"])
 
     @staticmethod
-    def publish_timetable_update(tasks, api):
+    def publish_timetable_update(robot_id, tasks, api):
         header = mf.create_header("timetable-update")
-        payload = mf.create_payload_from_dict({"tasks": tasks})
+        payload = mf.create_payload_from_dict({"robot_id": robot_id, "tasks": tasks})
         msg = Message(payload, header)
         api.publish(msg, groups=["ROPOD"])
 
