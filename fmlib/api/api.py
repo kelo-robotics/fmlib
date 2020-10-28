@@ -179,6 +179,9 @@ class API:
     def create_header(self, message_type, **kwargs):
         return self._mf.create_header(message_type, **kwargs)
 
+    def create_payload_from_dict(self, payload_dict):
+        return self._mf.create_payload_from_dict(payload_dict)
+
 
 def _get_callback_function(obj, component):
     objects = component.split('.')
