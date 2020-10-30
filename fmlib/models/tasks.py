@@ -3,6 +3,8 @@ import uuid
 from datetime import datetime, timedelta
 
 import dateutil.parser
+import pytz
+from bson.codec_options import CodecOptions
 from fmlib.models import requests
 from fmlib.models.actions import Action, ActionProgress, Duration
 from fmlib.models.environment import Position
@@ -174,6 +176,7 @@ class Task(MongoModel):
         archive_collection = 'task_archive'
         ignore_unknown_fields = True
         meta_model = 'task'
+        codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
 
     def save(self):
         try:
