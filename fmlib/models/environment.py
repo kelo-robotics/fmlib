@@ -1,4 +1,24 @@
+import dateutil.parser
+from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields
+
+
+class Timepoint(EmbeddedMongoModel):
+    utc_time = fields.DateTimeField()
+    timezone_offset = fields.FloatField()
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
+        dict_repr["utc_time"] = self.utc_time.isoformat()
+        return dict_repr
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        document['utc_time'] = dateutil.parser.parse(document.pop("utc_time"))
+        timepoint = cls.from_document(document)
+        return timepoint
 
 
 class Position(EmbeddedMongoModel):

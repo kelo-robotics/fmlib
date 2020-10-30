@@ -193,8 +193,8 @@ class Task(MongoModel):
         if 'task_id' not in kwargs.keys():
             kwargs.update(task_id=uuid.uuid4())
         elif 'constraints' not in kwargs.keys():
-            start = TimepointConstraint(earliest_time=datetime.now(),
-                                        latest_time=datetime.now() + timedelta(minutes=1))
+            start = TimepointConstraint(earliest_time=TimeStamp().to_datetime(),
+                                        latest_time=TimeStamp(delta=timedelta(minutes=1)).to_datetime())
             temporal = TemporalConstraints(start=start, work_time=Duration(), travel_time=Duration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
         kwargs.update(scheduled_time=TimepointConstraint())
@@ -230,10 +230,6 @@ class Task(MongoModel):
     def from_payload(cls, payload, save_in_db=True):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('task_id')
-        if document.get("departure_time"):
-            document["departure_time"] = dateutil.parser.parse(document.pop("departure_time"))
-        if document.get("finish_time"):
-            document["finish_time"] = dateutil.parser.parse(document.pop("finish_time"))
         task = cls.from_document(document)
         if save_in_db:
             task.save()
@@ -496,8 +492,8 @@ class TransportationTask(Task):
 
     @classmethod
     def from_request(cls, request, api=None):
-        pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time,
-                                     latest_time=request.latest_pickup_time)
+        pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time.utc_time,
+                                     latest_time=request.latest_pickup_time.utc_time)
         temporal = TemporalConstraints(start=pickup,
                                        work_time=Duration(),
                                        travel_time=Duration())
@@ -514,8 +510,8 @@ class NavigationTask(Task):
 
     @classmethod
     def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
-                                      latest_time=request.latest_arrival_time)
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
+                                      latest_time=request.latest_arrival_time.utc_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
@@ -529,8 +525,8 @@ class DefaultNavigationTask(NavigationTask):
     """
     @classmethod
     def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
-                                      latest_time=request.latest_arrival_time)
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
+                                      latest_time=request.latest_arrival_time.utc_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
@@ -547,8 +543,8 @@ class GuidanceTask(Task):
 
     @classmethod
     def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time,
-                                      latest_time=request.latest_arrival_time)
+        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
+                                      latest_time=request.latest_arrival_time.utc_time)
         temporal = TemporalConstraints(start=arrival,
                                        work_time=Duration(),
                                        travel_time=Duration())
@@ -565,8 +561,8 @@ class DisinfectionTask(Task):
 
     @classmethod
     def from_request(cls, request, api=None):
-        start = TimepointConstraint(earliest_time=request.earliest_start_time,
-                                    latest_time=request.latest_start_time)
+        start = TimepointConstraint(earliest_time=request.earliest_start_time.utc_time,
+                                    latest_time=request.latest_start_time.utc_time)
         temporal = TemporalConstraints(start=start,
                                        work_time=Duration(),
                                        travel_time=Duration())

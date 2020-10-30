@@ -1,9 +1,8 @@
 import logging
 import sys
 import uuid
-from datetime import datetime
 
-import dateutil.parser
+from fmlib.models.environment import Timepoint
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
@@ -12,6 +11,7 @@ from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
+from ropod.utils.timestamp import TimeStamp
 
 this_module = sys.modules[__name__]
 
@@ -71,7 +71,7 @@ class TaskRequest(EmbeddedMongoModel):
         return dict_repr
 
     def validate_request(self, path_planner, complete_request=True):
-        if self.latest_start_time < datetime.now():
+        if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
         elif not path_planner.is_valid_location(self.start_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
@@ -172,13 +172,21 @@ class TransportationRequest(TaskRequest):
     pickup_location_level = fields.IntegerField()
     delivery_location = fields.CharField()
     delivery_location_level = fields.IntegerField()
-    earliest_pickup_time = fields.DateTimeField()
-    latest_pickup_time = fields.DateTimeField()
+    earliest_pickup_time = fields.EmbeddedDocumentField(Timepoint)
+    latest_pickup_time = fields.EmbeddedDocumentField(Timepoint)
     load_type = fields.CharField()
     load_id = fields.CharField()
 
     class Meta:
         task_type = "TransportationTask"
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        document["earliest_pickup_time"] = Timepoint.from_payload(document.pop("earliest_pickup_time"))
+        document["latest_pickup_time"] = Timepoint.from_payload(document.pop("latest_pickup_time"))
+        request = cls.from_document(document)
+        return request
 
     @property
     def start_location(self):
@@ -215,8 +223,8 @@ class TransportationRequest(TaskRequest):
 
     def to_dict(self):
         dict_repr = super().to_dict()
-        dict_repr["earliest_pickup_time"] = self.earliest_pickup_time.isoformat()
-        dict_repr["latest_pickup_time"] = self.latest_pickup_time.isoformat()
+        dict_repr["earliest_pickup_time"] = self.earliest_pickup_time.to_dict()
+        dict_repr["latest_pickup_time"] = self.latest_pickup_time.to_dict()
         return dict_repr
 
     @staticmethod
@@ -230,10 +238,10 @@ class TransportationRequest(TaskRequest):
     @classmethod
     def from_dict(cls, **kwargs):
         if "earliest_pickup_time" in kwargs:
-            kwargs["earliest_pickup_time"] = dateutil.parser.parse(kwargs.pop("earliest_pickup_time"))
+            kwargs["earliest_pickup_time"] = Timepoint.from_payload(kwargs.pop("earliest_pickup_time"))
 
         if "latest_pickup_time" in kwargs:
-            kwargs["latest_pickup_time"] = dateutil.parser.parse(kwargs.pop("latest_pickup_time"))
+            kwargs["latest_pickup_time"] = Timepoint.from_payload(kwargs.pop("latest_pickup_time"))
         return kwargs
 
 
@@ -243,12 +251,20 @@ class NavigationRequest(TaskRequest):
     start_location_level = fields.IntegerField()
     goal_location = fields.CharField()
     goal_location_level = fields.IntegerField()
-    earliest_arrival_time = fields.DateTimeField()
-    latest_arrival_time = fields.DateTimeField()
+    earliest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
+    latest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
     wait_at_goal = fields.IntegerField(default=0)  # seconds
 
     class Meta:
         task_type = "NavigationTask"
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        document["earliest_arrival_time"] = Timepoint.from_payload(document.pop("earliest_arrival_time"))
+        document["latest_arrival_time"] = Timepoint.from_payload(document.pop("latest_arrival_time"))
+        request = cls.from_document(document)
+        return request
 
     @property
     def finish_location(self):
@@ -272,8 +288,8 @@ class NavigationRequest(TaskRequest):
 
     def to_dict(self):
         dict_repr = super().to_dict()
-        dict_repr["earliest_arrival_time"] = self.earliest_arrival_time.isoformat()
-        dict_repr["latest_arrival_time"] = self.latest_arrival_time.isoformat()
+        dict_repr["earliest_arrival_time"] = self.earliest_arrival_time.to_dict()
+        dict_repr["latest_arrival_time"] = self.latest_arrival_time.to_dict()
         return dict_repr
 
     @staticmethod
@@ -287,10 +303,10 @@ class NavigationRequest(TaskRequest):
     @classmethod
     def from_dict(cls, **kwargs):
         if "earliest_arrival_time" in kwargs:
-            kwargs["earliest_arrival_time"] = dateutil.parser.parse(kwargs.pop("earliest_arrival_time"))
+            kwargs["earliest_arrival_time"] = Timepoint.from_payload(kwargs.pop("earliest_arrival_time"))
 
         if "latest_arrival_time" in kwargs:
-            kwargs["latest_arrival_time"] = dateutil.parser.parse(kwargs.pop("latest_arrival_time"))
+            kwargs["latest_arrival_time"] = Timepoint.from_payload(kwargs.pop("latest_arrival_time"))
         return kwargs
 
 
@@ -304,12 +320,20 @@ class DisinfectionRequest(TaskRequest):
     area = fields.CharField()
     start_location = fields.CharField()
     finish_location = fields.CharField()
-    earliest_start_time = fields.DateTimeField()
-    latest_start_time = fields.DateTimeField()
+    earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
+    latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
 
     class Meta:
         task_type = "DisinfectionTask"
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
+        document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
+        request = cls.from_document(document)
+        return request
 
     def get_velocity(self):
         """ Returns max velocity (m/s) based on the dose """
@@ -339,17 +363,17 @@ class DisinfectionRequest(TaskRequest):
 
     def to_dict(self):
         dict_repr = super().to_dict()
-        dict_repr["earliest_start_time"] = self.earliest_start_time.isoformat()
-        dict_repr["latest_start_time"] = self.latest_start_time.isoformat()
+        dict_repr["earliest_start_time"] = self.earliest_start_time.to_dict()
+        dict_repr["latest_start_time"] = self.latest_start_time.to_dict()
         return dict_repr
 
     @classmethod
     def from_dict(cls, **kwargs):
         if "earliest_start_time" in kwargs:
-            kwargs["earliest_start_time"] = dateutil.parser.parse(kwargs.pop("earliest_start_time"))
+            kwargs["earliest_start_time"] = Timepoint.from_payload(kwargs.pop("earliest_start_time"))
 
         if "latest_start_time" in kwargs:
-            kwargs["latest_start_time"] = dateutil.parser.parse(kwargs.pop("latest_start_time"))
+            kwargs["latest_start_time"] = Timepoint.from_payload(kwargs.pop("latest_start_time"))
         return kwargs
 
 
