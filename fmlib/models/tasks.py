@@ -442,9 +442,9 @@ class Task(MongoModel):
     def get_tasks_by_status(status):
         tasks_by_status = [status.task for status in TaskStatus.objects.by_status(status)]
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-            status = [status for status in TaskStatus.objects.by_status(status)]
+            task_ids = [status.to_son().to_dict()['_id'] for status in TaskStatus.objects.by_status(status)]
             with switch_collection(Task, Task.Meta.archive_collection):
-                tasks_by_status.extend([s.task for s in status])
+                tasks_by_status.extend([Task.get_task(task_id) for task_id in task_ids])
         return tasks_by_status
 
     @classmethod
