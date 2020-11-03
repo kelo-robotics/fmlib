@@ -3,14 +3,14 @@ import uuid
 from datetime import timedelta
 
 import dateutil.parser
-from pymodm import fields, MongoModel
-from pymodm.manager import Manager
-from pymodm.queryset import QuerySet
-from pymongo.errors import ServerSelectionTimeoutError
-
 from fmlib.utils.messages import Document
 from fmlib.utils.messages import Message
 from fmlib.utils.messages import MessageFactory
+from pymodm import fields, MongoModel
+from pymodm.context_managers import switch_collection
+from pymodm.manager import Manager
+from pymodm.queryset import QuerySet
+from pymongo.errors import ServerSelectionTimeoutError
 
 mf = MessageFactory()
 
@@ -64,6 +64,11 @@ class Timetable(MongoModel):
     @classmethod
     def get_timetable(cls, robot_id):
         return cls.objects.get_timetable(robot_id)
+
+    @classmethod
+    def get_archived_timetable(cls, robot_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.objects.get_timetable(robot_id)
 
     def get_node_id(self, task_id, node_type):
         if isinstance(task_id, uuid.UUID):
