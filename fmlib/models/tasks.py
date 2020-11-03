@@ -344,10 +344,7 @@ class Task(MongoModel):
         except DoesNotExist:
             task_status = TaskStatus(task=self.task_id, status=status)
         task_status.save()
-        if status in [TaskStatusConst.COMPLETED,
-                      TaskStatusConst.CANCELED,
-                      TaskStatusConst.ABORTED,
-                      TaskStatusConst.FAILED]:
+        if status in TaskStatus.archived_status:
             task_status.archive()
             self.archive()
         self.publish_task_update()
@@ -643,6 +640,17 @@ class TaskStatus(MongoModel):
     progress = fields.EmbeddedDocumentField(TaskProgress)
 
     objects = TaskStatusManager()
+
+    archived_status = [TaskStatusConst.COMPLETED,
+                       TaskStatusConst.CANCELED,
+                       TaskStatusConst.ABORTED,
+                       TaskStatusConst.FAILED]
+
+    in_timetable = [TaskStatusConst.PLANNED,
+                    TaskStatusConst.ALLOCATED,
+                    TaskStatusConst.SCHEDULED,
+                    TaskStatusConst.DISPATCHED,
+                    TaskStatusConst.ONGOING]
 
     class Meta:
         archive_collection = 'task_status_archive'
