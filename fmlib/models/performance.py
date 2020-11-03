@@ -120,12 +120,12 @@ class RobotPerformance(MongoModel):
             performance.api = api
         return performance
 
-    def update_timetables(self, timetable):
+    def update_timetables(self, timetable, archived_timetable):
         if not self.timetables:
             self.timetables = list()
         timetable_model = timetable.to_model()
         self.timetables.append(timetable_model)
-        tasks = timetable.get_tasks_for_timetable_update()
+        tasks, task_ids = timetable.get_tasks_for_timetable_update(archived_timetable)
         timetable_model.publish_timetable_update(timetable.robot_id, tasks, self.api)
         self.save()
 
