@@ -1,14 +1,16 @@
 import logging
 
-from pymodm import connection
 from pymodm import connect
+from pymodm import connection
 from pymongo.errors import ServerSelectionTimeoutError
+from ropod.utils.logging.counter import ContextFilter
 
 
 class MongoStore:
 
     def __init__(self, db_name, port=27017, **kwargs):
         self.logger = logging.getLogger(__name__)
+        self.logger.addFilter(ContextFilter())
         self.db_name = db_name
         self.port = port
         self.ip = kwargs.get('ip', 'localhost')

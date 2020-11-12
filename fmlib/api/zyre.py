@@ -1,16 +1,17 @@
 import logging
 
 from ropod.pyre_communicator.base_class import RopodPyre
+from ropod.utils.logging.counter import ContextFilter
 
 
 class ZyreInterface(RopodPyre):
-    def __init__(self, zyre_node, logger_name='fms.api.zyre', **kwargs):
-        super().__init__(zyre_node, acknowledge=kwargs.get('acknowledge', False))
+    def __init__(self, zyre_node, logger_name='api.zyre', **kwargs):
+        super().__init__(zyre_node, logger_name="RopodPyre_" + logger_name, acknowledge=kwargs.get('acknowledge', False))
         self.logger = logging.getLogger(logger_name)
+        self.logger.addFilter(ContextFilter())
         self.callback_dict = dict()
         self.debug_messages = kwargs.get('debug_messages', list())
         self.publish_dict = kwargs.get('publish', dict())
-        self.logger.debug(self.publish_dict)
 
     def register_callback(self, function, msg_type, **kwargs):
         self.logger.debug("Adding callback function %s for message type %s", function.__name__,

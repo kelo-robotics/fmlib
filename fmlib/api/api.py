@@ -7,6 +7,7 @@ import logging
 from fmlib.api.rest.interface import RESTInterface
 from fmlib.api.zyre import ZyreInterface
 from fmlib.utils.messages import MessageFactory
+from ropod.utils.logging.counter import ContextFilter
 
 
 class API:
@@ -25,7 +26,9 @@ class API:
     """
 
     def __init__(self, middleware, **kwargs):
-        self.logger = logging.getLogger(__name__)
+        self.logger_name = kwargs.get("logger_name", "api")
+        self.logger = logging.getLogger(self.logger_name)
+        self.logger.addFilter(ContextFilter())
 
         self.publish_dict = dict()
         self.interfaces = list()
@@ -33,8 +36,6 @@ class API:
         self.middleware_collection = middleware
         self._configure(kwargs)
         self._mf = MessageFactory(kwargs.get('schema', 'unknown'))
-
-        self.logger.info("Initialized API")
 
     def publish(self, msg, **kwargs):
         """Publishes a message using the configured functions per middleware
@@ -152,7 +153,6 @@ class API:
             **kwargs:
 
         """
-        self.logger.debug("Adding %s callback to %s", function, middleware)
         getattr(self, middleware).register_callback(function, **kwargs)
 
     def start(self):
@@ -174,6 +174,7 @@ class API:
             interface.run()
 
     def create_message(self, model):
+        self.logger.debug("Creating message for model %s", model)
         return self._mf.create_message(model)
 
     def create_header(self, message_type, **kwargs):
