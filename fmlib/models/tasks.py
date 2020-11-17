@@ -363,6 +363,7 @@ class Task(MongoModel):
         self.travel_time = Duration()
         self.plan[0].robot = None
         self.save()
+        self.update_status(TaskStatusConst.UNALLOCATED)
         self.publish_task_update()
 
     def update_plan(self, task_plan):
