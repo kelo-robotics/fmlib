@@ -192,7 +192,10 @@ class Task(MongoModel):
 
     @classmethod
     def create_new(cls, **kwargs):
-        api = kwargs.pop("api")
+        try:
+            api = kwargs.pop("api")
+        except KeyError:
+            api = None
         if 'task_id' not in kwargs.keys():
             kwargs.update(task_id=uuid.uuid4())
         elif 'constraints' not in kwargs.keys():
