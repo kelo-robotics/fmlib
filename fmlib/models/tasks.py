@@ -346,10 +346,11 @@ class Task(MongoModel):
             task_status.status = status
         except DoesNotExist:
             task_status = TaskStatus(task=self.task_id, status=status)
-        task_status.save()
         if status in TaskStatus.archived_status:
             task_status.archive()
             self.archive()
+        else:
+            task_status.save()
         self.publish_task_update()
 
     def assign_robots(self, robot_ids, save_in_db=True,):
@@ -438,7 +439,11 @@ class Task(MongoModel):
         except DoesNotExist:
             try:
                 with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-                    return TaskStatus.objects.get({'_id': task_id})
+                    task_status = TaskStatus.objects.get({'_id': task_id})
+                    with switch_collection(Task, Task.Meta.archive_collection):
+                        task = Task.get_task(task_id)
+                        task_status.task = task
+                        return task_status
             except DoesNotExist:
                 raise
 
