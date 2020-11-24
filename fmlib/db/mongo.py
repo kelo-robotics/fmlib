@@ -30,12 +30,12 @@ class MongoStore:
             # Default timeout is 30s
             connect(connection_str, alias=self.alias, serverSelectionTimeoutMS=self._connection_timeout)
             self._connected = True
+            self.logger.info("Connected to %s on port %s", self.db_name, self.port)
         except ServerSelectionTimeoutError as err:
             self.logger.critical("Cannot connect to MongoDB", exc_info=True)
             self._connected = False
             return
 
-        self.logger.info("Connected to %s on port %s", self.db_name, self.port)
 
     @property
     def connected(self):
