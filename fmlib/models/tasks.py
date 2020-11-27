@@ -184,11 +184,10 @@ class Task(MongoModel):
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
 
-    def publish_task_update(self):
-        if hasattr(self, "api"):
-            msg = mf.create_message(self)
-            msg.type = "TASK-UPDATE"
-            self.api.publish(msg, groups=['ROPOD'])
+    def publish_task_update(self, api):
+        msg = mf.create_message(self)
+        msg.type = "TASK-UPDATE"
+        api.publish(msg, groups=['ROPOD'])
 
     @classmethod
     def create_new(cls, **kwargs):
@@ -206,9 +205,7 @@ class Task(MongoModel):
         kwargs.update(scheduled_time=TimepointConstraint())
         task = cls(**kwargs)
         task.save()
-        if api:
-            task.api = api
-        task.update_status(TaskStatusConst.UNALLOCATED)
+        task.update_status(TaskStatusConst.UNALLOCATED, api=api)
         return task
 
     @property
@@ -340,7 +337,7 @@ class Task(MongoModel):
             super().save()
         self.delete()
 
-    def update_status(self, status):
+    def update_status(self, status, api=None):
         try:
             task_status = Task.get_task_status(self.task_id)
             task_status.status = status
@@ -351,35 +348,35 @@ class Task(MongoModel):
             self.archive()
         else:
             task_status.save()
-        self.publish_task_update()
+        if api:
+            self.publish_task_update(api)
 
-    def assign_robots(self, robot_ids, save_in_db=True,):
+    def assign_robots(self, robot_ids, api=None, save_in_db=True,):
         self.assigned_robots = robot_ids
         # Assigns the first robot in the list to the plan
         # Does not work for single-task multi-robot
         self.plan[0].robot = robot_ids[0]
         if save_in_db:
             self.save()
-            self.update_status(TaskStatusConst.ALLOCATED)
+            self.update_status(TaskStatusConst.ALLOCATED, api)
 
-    def unassign_robots(self):
+    def unassign_robots(self, api=None):
         self.assigned_robots = list()
         self.travel_time = Duration()
         self.plan[0].robot = None
         self.save()
-        self.update_status(TaskStatusConst.UNALLOCATED)
-        self.publish_task_update()
+        self.update_status(TaskStatusConst.UNALLOCATED, api)
 
-    def update_plan(self, task_plan):
+    def update_plan(self, task_plan, api=None):
         # Adds the section of the plan that is independent from the robot,
         # e.g., for transportation tasks, the plan between pickup and delivery
         self.plan.append(task_plan)
-        self.update_status(TaskStatusConst.PLANNED)
+        self.update_status(TaskStatusConst.PLANNED, api)
         self.save()
 
-    def schedule(self, earliest_time, latest_time):
+    def schedule(self, earliest_time, latest_time, api=None):
         self.scheduled_time.update(earliest_time, latest_time)
-        self.update_status(TaskStatusConst.SCHEDULED)
+        self.update_status(TaskStatusConst.SCHEDULED, api)
         self.save()
 
     def is_executable(self):
@@ -438,14 +435,23 @@ class Task(MongoModel):
             return TaskStatus.objects.get({'_id': task_id})
         except DoesNotExist:
             try:
-                with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-                    task_status = TaskStatus.objects.get({'_id': task_id})
-                    with switch_collection(Task, Task.Meta.archive_collection):
-                        task = Task.get_task(task_id)
-                        task_status.task = task
-                        return task_status
+                return Task.get_archived_task_status(task_id)
             except DoesNotExist:
                 raise
+
+    @staticmethod
+    def get_archived_task_status(task_id):
+        if isinstance(task_id, str):
+            task_id = uuid.UUID(task_id)
+        try:
+            with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
+                task_status = TaskStatus.objects.get({'_id': task_id})
+        except DoesNotExist:
+            raise
+        with switch_collection(Task, Task.Meta.archive_collection):
+            task = Task.get_task(task_id)
+            task_status.task = task
+            return task_status
 
     @staticmethod
     def get_tasks_by_status(status):
