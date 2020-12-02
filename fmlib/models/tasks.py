@@ -20,6 +20,7 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
+import time
 
 mf = MessageFactory()
 
@@ -349,6 +350,7 @@ class Task(MongoModel):
         else:
             task_status.save()
         if api:
+            time.sleep(0.5)
             self.publish_task_update(api)
 
     def assign_robots(self, robot_ids, api=None, save_in_db=True,):
