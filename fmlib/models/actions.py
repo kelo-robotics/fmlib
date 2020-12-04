@@ -140,6 +140,7 @@ class Standstill(Action):
 
 
 class WallFollowing(Action):
+    start = fields.EmbeddedDocumentField(Position)
     checkpoints = fields.EmbeddedDocumentListField(Position)
     polygon = fields.EmbeddedDocumentListField(Position)
     velocity = fields.FloatField()
