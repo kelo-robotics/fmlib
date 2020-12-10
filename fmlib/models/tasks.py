@@ -434,12 +434,13 @@ class Task(MongoModel):
         if isinstance(task_id, str):
             task_id = uuid.UUID(task_id)
         try:
-            return TaskStatus.objects.get({'_id': task_id})
+            task_status = TaskStatus.objects.get({'_id': task_id})
         except DoesNotExist:
             try:
-                return Task.get_archived_task_status(task_id)
+                task_status = Task.get_archived_task_status(task_id)
             except DoesNotExist:
-                raise DoesNotExist
+                raise
+        return task_status
 
     @staticmethod
     def get_archived_task_status(task_id):
@@ -449,7 +450,7 @@ class Task(MongoModel):
             try:
                 task_status = TaskStatus.objects.get({'_id': task_id})
             except DoesNotExist:
-                raise DoesNotExist
+                raise
 
         with switch_collection(Task, Task.Meta.archive_collection):
             task = Task.get_task(task_id)
