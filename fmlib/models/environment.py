@@ -1,4 +1,5 @@
 import dateutil.parser
+import numpy as np
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields
 
@@ -54,7 +55,10 @@ class Position(EmbeddedMongoModel):
 
     def slope(self, other):
         # m = (y2 - y1) / (x2- x1)
-        return (other.y - self.y)/(other.x - self.x)
+        try:
+            return (other.y - self.y)/(other.x - self.x)
+        except ZeroDivisionError:
+            raise   # The slope is undefined, i.e. it is a vertical line
 
     def y_intercept(self, slope):
         # b = y - mx
@@ -66,22 +70,51 @@ class Position(EmbeddedMongoModel):
             line 2: perpendicular line between self and line 1
         """
         # Line 1:
-        m1 = point1.slope(point2)
-        b1 = point1.y_intercept(m1)
+        try:
+            m1 = point1.slope(point2)
+            b1 = point1.y_intercept(m1)
 
-        # Perpendicular lines have a slope of -1
-        # m1*m2 = -1
-        m2 = -1 /m1
+            if m1 == 0:
+                # The perpendicular line of an horizontal line is a vertical line
+                x = self.x
+                y = point1.y
+            else:
+                # Perpendicular lines have a slope of -1
+                # m1*m2 = -1
+                m2 = -1 / m1
 
-        # Line 2:  (y - self.y) = m2(x - self.x)
-        b2 = self.y_intercept(m2)
+                # Line 2:  (y - self.y) = m2(x - self.x)
+                b2 = self.y_intercept(m2)
 
-        # line1 = line2
-        # m1 * x + b1 = m2 * x + b2
-        x = (b2 - b1) / (m1 - m2)
-        y = m1 * x + b1
+                # line1 = line2
+                # m1 * x + b1 = m2 * x + b2
+                x = (b2 - b1) / (m1 - m2)
+                y = m1 * x + b1
+
+        except ZeroDivisionError:
+            # Line 1 is a vertical line (its slope is undefined)
+            x = point1.x
+
+            # The perpendicular line to Line 1 is an horizontal line
+            m2 = 0
+            # Line 2: y = b
+            b2 = self.y_intercept(m2)
+            y = b2
 
         return Position(x, y)
+
+    def get_closest_point(self, points):
+        "Return the closest point (from the list of points) to this point"
+        min_distance = np.inf
+        closest_point = None
+        for point in points:
+            distance = self.get_distance(point)
+            if distance < min_distance:
+                min_distance = distance
+                closest_point = point
+
+        return closest_point
+
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
