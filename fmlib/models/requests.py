@@ -47,7 +47,9 @@ class TaskRequest(EmbeddedMongoModel):
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
-    rrule = fields.DictField(blank=True)
+    rrule = fields.DictField(blank=True) # recurrent rule to create a recurrent event
+    exdates = fields.ListField(blank=True) # list of dates to exclude from the rrule
+    summary = fields.CharField(blank=True) # Description of the task (to be shown in the calendar)
 
     class Meta:
         ignore_unknown_fields = True
