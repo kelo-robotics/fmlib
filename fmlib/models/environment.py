@@ -2,11 +2,24 @@ import dateutil.parser
 import numpy as np
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields
+from datetime import timedelta
 
 
 class Timepoint(EmbeddedMongoModel):
     utc_time = fields.DateTimeField()
     timezone_offset = fields.FloatField()
+
+    def postpone(self, delta, resolution='seconds'):
+        try:
+            _res = {'hours': 3600, 'minutes': 60, 'seconds': 1}.get(resolution)
+            delta = delta * _res
+            self.utc_time += timedelta(seconds=delta)
+        except NameError:
+            print("Invalid resolution")
+
+    def __str__(self):
+        return f" UTC time {self.utc_time.isoformat()} \t" \
+               f" Timezone offset {self.timezone_offset}"
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()

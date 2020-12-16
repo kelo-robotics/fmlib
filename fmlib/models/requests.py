@@ -2,6 +2,7 @@ import logging
 import sys
 import uuid
 
+import pytz
 from fmlib.models.environment import Timepoint
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
@@ -46,6 +47,7 @@ class TaskRequest(EmbeddedMongoModel):
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
+    rrule = fields.DictField(blank=True)
 
     class Meta:
         ignore_unknown_fields = True
@@ -188,6 +190,20 @@ class TransportationRequest(TaskRequest):
         request = cls.from_document(document)
         return request
 
+    @classmethod
+    def from_recurring_event(cls, event):
+        timezone_offset = event.start.utcoffset().total_seconds()/60
+        earliest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_pickup_time.postpone(event.start_delta)
+
+        return cls.create_new(pickup_location=event.pickup_location,
+                              delivery_location=event.delivery_location,
+                              earliest_pickup_time=earliest_pickup_time,
+                              latest_pickup_time=latest_pickup_time,
+                              load_type=event.load_type,
+                              load_id=event.load_id)
+
     @property
     def start_location(self):
         return self.pickup_location
@@ -266,6 +282,19 @@ class NavigationRequest(TaskRequest):
         request = cls.from_document(document)
         return request
 
+    @classmethod
+    def from_recurring_event(cls, event):
+        timezone_offset = event.start.utcoffset().total_seconds()/60
+        earliest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_arrival_time.postpone(event.start_delta)
+
+        return cls.create_new(start_location=event.start_location,
+                              goal_location=event.goal_location,
+                              earliest_arrival_time=earliest_arrival_time,
+                              latest_arrival_time=latest_arrival_time,
+                              wait_at_goal=event.wait_at_goal)
+
     @property
     def finish_location(self):
         return self.goal_location
@@ -334,6 +363,17 @@ class DisinfectionRequest(TaskRequest):
         document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
         request = cls.from_document(document)
         return request
+
+    @classmethod
+    def from_recurring_event(cls, event):
+        timezone_offset = event.start.utcoffset().total_seconds()/60
+        earliest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_start_time.postpone(event.start_delta)
+
+        return cls.create_new(area=event.area,
+                              earliest_start_time=earliest_start_time,
+                              latest_start_time=latest_start_time)
 
     def get_velocity(self):
         """ Returns max velocity (m/s) based on the dose """

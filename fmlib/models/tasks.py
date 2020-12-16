@@ -412,6 +412,22 @@ class Task(MongoModel):
                     actions.append(action_progress.action)
             return actions
 
+    def to_event(self, event):
+        event.add('uid', uuid.uuid4())
+        dtstart = self.request.earliest_start_time.utc_time
+        event.add('dtstart', dtstart)
+
+        # The dtend assumes that the task duration is mean + 2stdev
+        estimated_duration = self.work_time.mean + 2* self.work_time.standard_dev
+        dtend = dtstart + timedelta(seconds=estimated_duration)
+        event.add('dtend', dtend)
+
+        dtstart_delta = self.latest_start_time - self.earliest_start_time
+        event.add('dtstart-delta', dtstart_delta.total_seconds())
+
+        event.add('task-type', self.request.Meta.task_type)
+        return event
+
     @property
     def meta_model(self):
         return self.Meta.meta_model
@@ -520,6 +536,12 @@ class TransportationTask(Task):
         task = cls.create_new(type='transportation', request=request, constraints=constraints, api=api)
         return task
 
+    def to_event(self, event):
+        event = super().to_event(event)
+        event.add('load-type', self.request.load_type)
+        event.add('load-id', self.request.load_id)
+        return event
+
 
 class NavigationTask(Task):
     request = fields.EmbeddedDocumentField(requests.NavigationRequest)
@@ -537,6 +559,11 @@ class NavigationTask(Task):
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(type='navigation', request=request, constraints=constraints, api=api)
         return task
+
+    def to_event(self, event):
+        event = super().to_event(event)
+        event.add('wait-at-goal', self.request.wait_at_goal)
+        return event
 
 
 class DefaultNavigationTask(NavigationTask):
@@ -571,6 +598,11 @@ class GuidanceTask(Task):
         task = cls.create_new(type='guidance', request=request, constraints=constraints, api=api)
         return task
 
+    def to_event(self, event):
+        event = super().to_event(event)
+        event.add('wait-at-goal', self.request.wait_at_goal)
+        return event
+
 
 class DisinfectionTask(Task):
     request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
@@ -589,6 +621,10 @@ class DisinfectionTask(Task):
         task = cls.create_new(type='disinfection', request=request, constraints=constraints, api=api)
         return task
 
+    def to_event(self, event):
+        event = super().to_event(event)
+        event.add('area', self.request.area)
+        return event
 
 class TaskProgress(EmbeddedMongoModel):
 
