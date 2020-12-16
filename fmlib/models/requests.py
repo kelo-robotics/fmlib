@@ -47,6 +47,7 @@ class TaskRequest(EmbeddedMongoModel):
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
+    rrule = fields.DictField(blank=True)
 
     class Meta:
         ignore_unknown_fields = True
