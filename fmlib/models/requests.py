@@ -27,11 +27,30 @@ class RequestQuerySet(QuerySet):
 RequestManager = Manager.from_queryset(RequestQuerySet)
 
 
+class TaskRequestQuerySet(QuerySet):
+
+    def by_event_uid(self, event_uid):
+        if isinstance(event_uid, str):
+            try:
+                event_uid = uuid.UUID(event_uid)
+            except ValueError as e:
+                raise e
+
+        return self.raw({'event_uid': event_uid})
+
+TaskRequestManager = Manager.from_queryset(TaskRequestQuerySet)
+
+
 class Request(MongoModel):
     request_id = fields.UUIDField(primary_key=True)
     user_id = fields.ReferenceField(User)
 
     objects = RequestManager()
+
+    class Meta:
+        update_collection = "request_update"
+        archive_collection = 'request_archive'
+        ignore_unknown_fields = True
 
     @classmethod
     def get_request(cls, request_id):
@@ -40,34 +59,49 @@ class Request(MongoModel):
         return cls.objects.get_request(request_id)
 
 
-class TaskRequest(EmbeddedMongoModel):
+class TaskRequest(MongoModel):
     task_id = fields.UUIDField(blank=True)
     parent_task_id = fields.UUIDField(blank=True)  # Indicates that this request was originated from an uncompleted task
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
+    event_uid = fields.UUIDField(blank=True)  # Indicates that this request was originated from an event id
     rrule = fields.DictField(blank=True) # recurrent rule to create a recurrent event
     exdates = fields.ListField(blank=True) # list of dates to exclude from the rrule
     summary = fields.CharField(blank=True) # Description of the task (to be shown in the calendar)
 
+    objects = TaskRequestManager()
+
     class Meta:
+        archive_collection = "task_request_archive"
         ignore_unknown_fields = True
         task_type = "Task"
+
+    def archive(self):
+        with switch_collection(self, TaskRequest.Meta.archive_collection):
+            super().save()
+        self.delete()
 
     @property
     def task_type(self):
         return self.Meta.task_type
 
+    def update_task_id(self, task_id):
+        self.task_id = task_id
+        self.save()
+
     @classmethod
     def create_new(cls, **kwargs):
         request = cls(**kwargs)
+        request.save()
         return request
 
     @classmethod
     def from_payload(cls, payload):
         document = Document.from_payload(payload)
         request = cls.from_document(document)
+        request.save()
         return request
 
     def to_dict(self):
@@ -100,22 +134,28 @@ class TaskRequest(EmbeddedMongoModel):
         request = self.create_new(**kwargs)
         return request
 
+    @classmethod
+    def get_task_requests(cls):
+        return [task_request for task_request in cls.objects.all()]
+
+    @classmethod
+    def get_task_requests_by_event(cls, event_uid):
+        return [task_request for task_request in cls.objects.by_event_uid(event_uid)]
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_id')
+        return dict_repr
+
 
 class TaskRequests(Request):
-    requests = fields.EmbeddedDocumentListField(TaskRequest)
+    requests = fields.ListField(fields.ReferenceField(TaskRequest))
 
     objects = RequestManager()
 
     class Meta:
-        collection_name = "task_request"
-        update_collection = "task_request_update"
-        archive_collection = 'task_request_archive'
         ignore_unknown_fields = True
         meta_model = "task-request"
-
-    def update_task_id(self, request, task_id):
-        request.task_id = task_id
-        self.save()
 
     def mark_as_invalid(self, request):
         request.valid = False
@@ -140,6 +180,9 @@ class TaskRequests(Request):
         if "request_id" not in kwargs.keys():
             kwargs.update(request_id=uuid.uuid4())
         request = cls(**kwargs)
+        for r in request.requests:
+            r.save()
+        request.save()
         return request
 
     @classmethod
@@ -152,12 +195,12 @@ class TaskRequests(Request):
             request_cls = getattr(this_module, request_type)
             requests.append(request_cls.from_payload(request))
         document['requests'] = requests
-        tasks_request = cls.from_document(document)
+        task_requests = cls.from_document(document)
         if update:
-            tasks_request.save_update()
+            task_requests.save_update()
         else:
-            tasks_request.save()
-        return tasks_request
+            task_requests.save()
+        return task_requests
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
@@ -169,6 +212,12 @@ class TaskRequests(Request):
         dict_repr["requests"] = requests
         return dict_repr
 
+    @classmethod
+    def get_requests(cls):
+        return [request for request in cls.objects.all()]
+
+    def get_task_requests_by_event_uid(self, event_uid):
+        return TaskRequest.get_task_requests_by_event(event_uid)
 
 class TransportationRequest(TaskRequest):
 
@@ -181,6 +230,8 @@ class TransportationRequest(TaskRequest):
     load_type = fields.CharField()
     load_id = fields.CharField()
 
+    objects = TaskRequestManager()
+
     class Meta:
         task_type = "TransportationTask"
 
@@ -190,6 +241,7 @@ class TransportationRequest(TaskRequest):
         document["earliest_pickup_time"] = Timepoint.from_payload(document.pop("earliest_pickup_time"))
         document["latest_pickup_time"] = Timepoint.from_payload(document.pop("latest_pickup_time"))
         request = cls.from_document(document)
+        request.save()
         return request
 
     @classmethod
@@ -199,7 +251,9 @@ class TransportationRequest(TaskRequest):
         latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time.postpone(event.start_delta)
 
-        return cls.create_new(pickup_location=event.pickup_location,
+        return cls.create_new(event_uid=event.uid,
+                              summary = event.summary,
+                              pickup_location=event.pickup_location,
                               delivery_location=event.delivery_location,
                               earliest_pickup_time=earliest_pickup_time,
                               latest_pickup_time=latest_pickup_time,
@@ -273,6 +327,8 @@ class NavigationRequest(TaskRequest):
     latest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
     wait_at_goal = fields.IntegerField(default=0)  # seconds
 
+    objects = TaskRequestManager()
+
     class Meta:
         task_type = "NavigationTask"
 
@@ -282,6 +338,7 @@ class NavigationRequest(TaskRequest):
         document["earliest_arrival_time"] = Timepoint.from_payload(document.pop("earliest_arrival_time"))
         document["latest_arrival_time"] = Timepoint.from_payload(document.pop("latest_arrival_time"))
         request = cls.from_document(document)
+        request.save()
         return request
 
     @classmethod
@@ -291,7 +348,9 @@ class NavigationRequest(TaskRequest):
         latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time.postpone(event.start_delta)
 
-        return cls.create_new(start_location=event.start_location,
+        return cls.create_new(event_uid=event.uid,
+                              summary=event.summary,
+                              start_location=event.start_location,
                               goal_location=event.goal_location,
                               earliest_arrival_time=earliest_arrival_time,
                               latest_arrival_time=latest_arrival_time,
@@ -343,6 +402,8 @@ class NavigationRequest(TaskRequest):
 
 class GuidanceRequest(NavigationRequest):
 
+    objects = TaskRequestManager()
+
     class Meta:
         task_type = "GuidanceTask"
 
@@ -355,6 +416,8 @@ class DisinfectionRequest(TaskRequest):
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
 
+    objects = TaskRequestManager()
+
     class Meta:
         task_type = "DisinfectionTask"
 
@@ -364,6 +427,7 @@ class DisinfectionRequest(TaskRequest):
         document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
         document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
         request = cls.from_document(document)
+        request.save()
         return request
 
     @classmethod
@@ -373,7 +437,9 @@ class DisinfectionRequest(TaskRequest):
         latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time.postpone(event.start_delta)
 
-        return cls.create_new(area=event.area,
+        return cls.create_new(event_uid=event.uid,
+                              summary=event.summary,
+                              area=event.area,
                               earliest_start_time=earliest_start_time,
                               latest_start_time=latest_start_time)
 
@@ -402,6 +468,7 @@ class DisinfectionRequest(TaskRequest):
     def complete_request(self, path_planner):
         self.start_location = path_planner.get_start_location(self.area)
         self.finish_location = path_planner.get_finish_location(self.area)
+        self.save()
 
     def to_dict(self):
         dict_repr = super().to_dict()
