@@ -163,7 +163,7 @@ class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
     type = fields.CharField()
     parent_task_id = fields.UUIDField(blank=True)
-    request = fields.EmbeddedDocumentField(requests.TaskRequest)
+    request = fields.ReferenceField(requests.TaskRequest)
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
     constraints = fields.EmbeddedDocumentField(TaskConstraints)
@@ -334,6 +334,7 @@ class Task(MongoModel):
         return earliest_task
 
     def archive(self):
+        self.request.archive()
         with switch_collection(self, Task.Meta.archive_collection):
             super().save()
         self.delete()
@@ -413,7 +414,11 @@ class Task(MongoModel):
             return actions
 
     def to_event(self, event):
-        event.add('uid', uuid.uuid4())
+        uid = uuid.uuid4()
+        self.request.event_uid = uid
+        self.save()
+
+        event.add('uid', uid)
         dtstart = self.request.earliest_start_time.utc_time
         event.add('dtstart', dtstart)
 
