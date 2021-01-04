@@ -93,6 +93,14 @@ class TaskRequest(MongoModel):
 
     @classmethod
     def create_new(cls, **kwargs):
+        try:
+            exdates = kwargs.pop("exdates")
+            parsed_exdates = list()
+            for d in exdates:
+                parsed_exdates.append(d.isoformat())
+            kwargs.update(exdates=parsed_exdates)
+        except KeyError:
+            pass
         request = cls(**kwargs)
         request.save()
         return request
