@@ -1,13 +1,22 @@
+from datetime import timedelta
+
 import dateutil.parser
 import numpy as np
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields
-from datetime import timedelta
+from ropod.utils.timestamp import TimeStamp
 
 
 class Timepoint(EmbeddedMongoModel):
     utc_time = fields.DateTimeField()
     timezone_offset = fields.FloatField()
+
+    @classmethod
+    def create_new(cls, **kwargs):
+        utc_time = kwargs.get("utc_time", TimeStamp().to_datetime())
+        timezone_offset = kwargs.get("timezone_offset", utc_time.utcoffset().total_seconds()/60)
+        timepoint = cls(utc_time=utc_time, timezone_offset=timezone_offset)
+        return timepoint
 
     def postpone(self, delta, resolution='seconds'):
         try:
