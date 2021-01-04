@@ -179,10 +179,6 @@ class TaskRequests(Request):
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
 
-    def save_update(self):
-        with switch_collection(self, TaskRequests.Meta.update_collection):
-            super().save()
-
     @classmethod
     def create_new(cls, **kwargs):
         if "request_id" not in kwargs.keys():
@@ -194,7 +190,7 @@ class TaskRequests(Request):
         return request
 
     @classmethod
-    def from_payload(cls, payload, update=False):
+    def from_payload(cls, payload):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('request_id')
         requests = list()
@@ -204,10 +200,7 @@ class TaskRequests(Request):
             requests.append(request_cls.from_payload(request))
         document['requests'] = requests
         task_requests = cls.from_document(document)
-        if update:
-            task_requests.save_update()
-        else:
-            task_requests.save()
+        task_requests.save()
         return task_requests
 
     def to_dict(self):
@@ -406,6 +399,15 @@ class NavigationRequest(TaskRequest):
         if "latest_arrival_time" in kwargs:
             kwargs["latest_arrival_time"] = Timepoint.from_payload(kwargs.pop("latest_arrival_time"))
         return kwargs
+
+class DefaultNavigationRequest(NavigationRequest):
+    """ Return to default waiting location
+    """
+
+    objects = TaskRequestManager()
+
+    class Meta:
+        task_type = "DefaultNavigationTask"
 
 
 class GuidanceRequest(NavigationRequest):
