@@ -161,7 +161,6 @@ class TaskPlan(EmbeddedMongoModel):
 
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
-    type = fields.CharField()
     parent_task_id = fields.UUIDField(blank=True)
     request = fields.ReferenceField(requests.TaskRequest)
     assigned_robots = fields.ListField(blank=True)
@@ -208,6 +207,10 @@ class Task(MongoModel):
         task.save()
         task.update_status(TaskStatusConst.UNALLOCATED, api=api)
         return task
+
+    @property
+    def task_type(self):
+        return self.request.Meta.task_type
 
     @property
     def departure_time(self):
@@ -538,7 +541,7 @@ class TransportationTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='transportation', request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     def to_event(self, event):
@@ -562,28 +565,13 @@ class NavigationTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='navigation', request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     def to_event(self, event):
         event = super().to_event(event)
         event.add('wait-at-goal', self.request.wait_at_goal)
         return event
-
-
-class DefaultNavigationTask(NavigationTask):
-    """ Return to default waiting location
-    """
-    @classmethod
-    def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
-                                      latest_time=request.latest_arrival_time.utc_time)
-        temporal = TemporalConstraints(start=arrival,
-                                       work_time=Duration(),
-                                       travel_time=Duration())
-        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='default_navigation', request=request, constraints=constraints, api=api)
-        return task
 
 
 class GuidanceTask(Task):
@@ -600,7 +588,7 @@ class GuidanceTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='guidance', request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     def to_event(self, event):
@@ -623,7 +611,7 @@ class DisinfectionTask(Task):
                                        work_time=Duration(),
                                        travel_time=Duration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
-        task = cls.create_new(type='disinfection', request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     def to_event(self, event):
