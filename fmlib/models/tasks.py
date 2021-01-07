@@ -208,6 +208,9 @@ class Task(MongoModel):
         task.update_status(TaskStatusConst.UNALLOCATED, api=api)
         return task
 
+    def is_recurrent(self):
+        return self.request.is_recurrent()
+
     @property
     def task_type(self):
         return self.request.Meta.task_type
@@ -416,24 +419,40 @@ class Task(MongoModel):
                     actions.append(action_progress.action)
             return actions
 
-    def to_event(self, event):
-        uid = uuid.uuid4()
-        self.request.event_uid = uid
+    def to_request(self, **kwargs):
+        request_type = kwargs.pop("_cls").split('.')[-1]
+        request_cls = getattr(requests, request_type)
+        ignore_attrs = ["task_id", "uid"]
+
+        kwargs = self.request.parse_dict(**kwargs)
+
+        for attr in self.request.__dict__['_data'].__dict__['_members']:
+            if attr not in kwargs and attr not in ignore_attrs:
+                kwargs[attr] = getattr(self.request, attr)
+        kwargs.update(parent_task_id=self.task_id)
+
+        request = request_cls.create_new(**kwargs)
         self.save()
 
-        event.add('uid', uid)
+        return request
+
+    def to_icalendar_event(self):
         dtstart = self.request.earliest_start_time.utc_time
-        event.add('dtstart', dtstart)
+        # from utc time to timezone
+
+        # event.add('dtstart', datetime.now(tz=pytz.timezone('Europe/Berlin')), )
 
         # The dtend assumes that the task duration is mean + 2stdev
         estimated_duration = self.work_time.mean + 2* self.work_time.standard_dev
         dtend = dtstart + timedelta(seconds=estimated_duration)
-        event.add('dtend', dtend)
 
         dtstart_delta = self.latest_start_time - self.earliest_start_time
-        event.add('dtstart-delta', dtstart_delta.total_seconds())
 
-        event.add('task-type', self.request.Meta.task_type)
+        # TODO: Add new attrs to event model
+
+        event = self.request.event.to_icalendar_event(dtstart=dtstart,
+                                                      dtend=dtend,
+                                                      dtstart_delta=dtstart_delta.total_seconds())
         return event
 
     @property
@@ -495,6 +514,14 @@ class Task(MongoModel):
         return [task for task in cls.objects.all() if robot_id in task.assigned_robots]
 
     @classmethod
+    def get_tasks_by_event(cls, event_uid):
+        tasks = list()
+        task_ids = [request.task_id for request in requests.TaskRequest.get_task_requests_by_event(event_uid)]
+        for task_id in task_ids:
+            tasks.append(Task.get_task(task_id))
+        return tasks
+
+    @classmethod
     def get_tasks(cls, robot_id=None, status=None):
         if status:
             tasks = cls.get_tasks_by_status(status)
@@ -544,8 +571,8 @@ class TransportationTask(Task):
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
-    def to_event(self, event):
-        event = super().to_event(event)
+    def to_icalendar_event(self):
+        event = super().to_icalendar_event()
         event.add('load-type', self.request.load_type)
         event.add('load-id', self.request.load_id)
         return event
@@ -568,10 +595,13 @@ class NavigationTask(Task):
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
-    def to_event(self, event):
-        event = super().to_event(event)
+    def to_icalendar_event(self):
+        event = super().to_icalendar_event()
         event.add('wait-at-goal', self.request.wait_at_goal)
         return event
+
+class DefaultNavigationTask(NavigationTask):
+    objects = TaskManager()
 
 
 class GuidanceTask(Task):
@@ -591,8 +621,8 @@ class GuidanceTask(Task):
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
-    def to_event(self, event):
-        event = super().to_event(event)
+    def to_icalendar_event(self):
+        event = super().to_icalendar_event()
         event.add('wait-at-goal', self.request.wait_at_goal)
         return event
 
@@ -614,8 +644,8 @@ class DisinfectionTask(Task):
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
-    def to_event(self, event):
-        event = super().to_event(event)
+    def to_icalendar_event(self):
+        event = super().to_icalendar_event()
         event.add('area', self.request.area)
         return event
 

@@ -4,9 +4,10 @@ import uuid
 
 import pytz
 from fmlib.models.environment import Timepoint
+from fmlib.models.event import Event
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
-from pymodm import EmbeddedMongoModel, fields, MongoModel
+from pymodm import fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
@@ -25,20 +26,6 @@ class RequestQuerySet(QuerySet):
 
 
 RequestManager = Manager.from_queryset(RequestQuerySet)
-
-
-class TaskRequestQuerySet(QuerySet):
-
-    def by_event_uid(self, event_uid):
-        if isinstance(event_uid, str):
-            try:
-                event_uid = uuid.UUID(event_uid)
-            except ValueError as e:
-                raise e
-
-        return self.raw({'event_uid': event_uid})
-
-TaskRequestManager = Manager.from_queryset(TaskRequestQuerySet)
 
 
 class Request(MongoModel):
@@ -66,12 +53,10 @@ class TaskRequest(MongoModel):
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
-    event_uid = fields.UUIDField(blank=True)  # Indicates that this request was originated from an event id
-    rrule = fields.DictField(blank=True) # recurrent rule to create a recurrent event
-    exdates = fields.ListField(blank=True) # list of dates to exclude from the rrule
-    summary = fields.CharField(blank=True) # Description of the task (to be shown in the calendar)
+    event = fields.ReferenceField(Event, blank=True)
 
-    objects = TaskRequestManager()
+    # Used by task-request-update
+    update_all = fields.BooleanField(default=False)
 
     class Meta:
         archive_collection = "task_request_archive"
@@ -93,28 +78,27 @@ class TaskRequest(MongoModel):
 
     @classmethod
     def create_new(cls, **kwargs):
-        try:
-            exdates = kwargs.pop("exdates")
-            parsed_exdates = list()
-            for d in exdates:
-                parsed_exdates.append(d.isoformat())
-            kwargs.update(exdates=parsed_exdates)
-        except KeyError:
-            pass
+        event = kwargs.get("event")
+        if isinstance(event, dict):
+            event = Event.create_new(**kwargs.pop("event"))
+            kwargs.update(event=event.uid)
         request = cls(**kwargs)
         request.save()
         return request
 
     @classmethod
-    def from_payload(cls, payload):
+    def to_document(cls, payload):
         document = Document.from_payload(payload)
-        request = cls.from_document(document)
-        request.save()
-        return request
+        event = document.get("event")
+        if isinstance(event, dict):
+            event.update(task_type=cls.Meta.task_type)
+            document["event"] = Event.from_payload(event)
+        return document
 
-    def to_dict(self):
-        dict_repr = self.to_son().to_dict()
-        return dict_repr
+    def is_recurrent(self):
+        if self.event:
+            return True
+        return False
 
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
@@ -129,18 +113,8 @@ class TaskRequest(MongoModel):
         return kwargs
 
     @classmethod
-    def from_dict(cls, **kwargs):
-        return kwargs
-
-    def from_task(self, task, **kwargs):
-        kwargs = self.from_dict(**kwargs)
-
-        for attr in self.__dict__['_data'].__dict__['_members']:
-            if attr not in kwargs:
-                kwargs[attr] = getattr(self, attr)
-        kwargs.update(parent_task_id=task.task_id)
-        request = self.create_new(**kwargs)
-        return request
+    def parse_dict(cls, **kwargs):
+        return Event.from_dict(**kwargs)
 
     @classmethod
     def get_task_requests(cls):
@@ -148,11 +122,19 @@ class TaskRequest(MongoModel):
 
     @classmethod
     def get_task_requests_by_event(cls, event_uid):
-        return [task_request for task_request in cls.objects.by_event_uid(event_uid)]
+        if isinstance(event_uid, str):
+            event_uid = uuid.UUID(event_uid)
+        task_requests = list()
+        for task_request in cls.get_task_requests():
+            if task_request.event.uid == event_uid:
+                task_requests.append(task_request)
+        return task_requests
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr.pop('_id')
+        if self.event:
+            dict_repr["event"] = self.event.to_dict()
         return dict_repr
 
 
@@ -231,14 +213,12 @@ class TransportationRequest(TaskRequest):
     load_type = fields.CharField()
     load_id = fields.CharField()
 
-    objects = TaskRequestManager()
-
     class Meta:
         task_type = "TransportationTask"
 
     @classmethod
     def from_payload(cls, payload):
-        document = Document.from_payload(payload)
+        document = super().to_document(payload)
         document["earliest_pickup_time"] = Timepoint.from_payload(document.pop("earliest_pickup_time"))
         document["latest_pickup_time"] = Timepoint.from_payload(document.pop("latest_pickup_time"))
         request = cls.from_document(document)
@@ -252,8 +232,7 @@ class TransportationRequest(TaskRequest):
         latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time.postpone(event.start_delta)
 
-        return cls.create_new(event_uid=event.uid,
-                              summary = event.summary,
+        return cls.create_new(event=event.uid,
                               pickup_location=event.pickup_location,
                               delivery_location=event.delivery_location,
                               earliest_pickup_time=earliest_pickup_time,
@@ -309,7 +288,8 @@ class TransportationRequest(TaskRequest):
         return kwargs
 
     @classmethod
-    def from_dict(cls, **kwargs):
+    def parse_dict(cls, **kwargs):
+        kwargs = super().parse_dict(**kwargs)
         if "earliest_pickup_time" in kwargs:
             kwargs["earliest_pickup_time"] = Timepoint.from_payload(kwargs.pop("earliest_pickup_time"))
 
@@ -328,14 +308,12 @@ class NavigationRequest(TaskRequest):
     latest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
     wait_at_goal = fields.IntegerField(default=0)  # seconds
 
-    objects = TaskRequestManager()
-
     class Meta:
         task_type = "NavigationTask"
 
     @classmethod
     def from_payload(cls, payload):
-        document = Document.from_payload(payload)
+        document = super().to_document(payload)
         document["earliest_arrival_time"] = Timepoint.from_payload(document.pop("earliest_arrival_time"))
         document["latest_arrival_time"] = Timepoint.from_payload(document.pop("latest_arrival_time"))
         request = cls.from_document(document)
@@ -349,8 +327,7 @@ class NavigationRequest(TaskRequest):
         latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time.postpone(event.start_delta)
 
-        return cls.create_new(event_uid=event.uid,
-                              summary=event.summary,
+        return cls.create_new(event=event.uid,
                               start_location=event.start_location,
                               goal_location=event.goal_location,
                               earliest_arrival_time=earliest_arrival_time,
@@ -392,7 +369,8 @@ class NavigationRequest(TaskRequest):
         return kwargs
 
     @classmethod
-    def from_dict(cls, **kwargs):
+    def parse_dict(cls, **kwargs):
+        kwargs = super().parse_dict(**kwargs)
         if "earliest_arrival_time" in kwargs:
             kwargs["earliest_arrival_time"] = Timepoint.from_payload(kwargs.pop("earliest_arrival_time"))
 
@@ -404,15 +382,11 @@ class DefaultNavigationRequest(NavigationRequest):
     """ Return to default waiting location
     """
 
-    objects = TaskRequestManager()
-
     class Meta:
         task_type = "DefaultNavigationTask"
 
 
 class GuidanceRequest(NavigationRequest):
-
-    objects = TaskRequestManager()
 
     class Meta:
         task_type = "GuidanceTask"
@@ -426,14 +400,12 @@ class DisinfectionRequest(TaskRequest):
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
 
-    objects = TaskRequestManager()
-
     class Meta:
         task_type = "DisinfectionTask"
 
     @classmethod
     def from_payload(cls, payload):
-        document = Document.from_payload(payload)
+        document = super().to_document(payload)
         document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
         document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
         request = cls.from_document(document)
@@ -447,8 +419,7 @@ class DisinfectionRequest(TaskRequest):
         latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time.postpone(event.start_delta)
 
-        return cls.create_new(event_uid=event.uid,
-                              summary=event.summary,
+        return cls.create_new(event=event.uid,
                               area=event.area,
                               earliest_start_time=earliest_start_time,
                               latest_start_time=latest_start_time)
@@ -487,7 +458,8 @@ class DisinfectionRequest(TaskRequest):
         return dict_repr
 
     @classmethod
-    def from_dict(cls, **kwargs):
+    def parse_dict(cls, **kwargs):
+        kwargs = super().parse_dict(**kwargs)
         if "earliest_start_time" in kwargs:
             kwargs["earliest_start_time"] = Timepoint.from_payload(kwargs.pop("earliest_start_time"))
 
