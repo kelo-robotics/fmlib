@@ -35,7 +35,6 @@ class Request(MongoModel):
     objects = RequestManager()
 
     class Meta:
-        update_collection = "request_update"
         archive_collection = 'request_archive'
         ignore_unknown_fields = True
 
@@ -54,9 +53,6 @@ class TaskRequest(MongoModel):
     eligible_robots = fields.ListField(blank=True)
     valid = fields.BooleanField()
     event = fields.ReferenceField(Event, blank=True)
-
-    # Used by task-request-update
-    update_all = fields.BooleanField(default=False)
 
     class Meta:
         archive_collection = "task_request_archive"
@@ -126,7 +122,7 @@ class TaskRequest(MongoModel):
             event_uid = uuid.UUID(event_uid)
         task_requests = list()
         for task_request in cls.get_task_requests():
-            if task_request.event.uid == event_uid:
+            if task_request.event and task_request.event.uid == event_uid:
                 task_requests.append(task_request)
         return task_requests
 
@@ -181,6 +177,7 @@ class TaskRequests(Request):
             request_cls = getattr(this_module, request_type)
             requests.append(request_cls.from_payload(request))
         document['requests'] = requests
+        document['user_id'] = User.create_new(user_id=document['user_id'])
         task_requests = cls.from_document(document)
         task_requests.save()
         return task_requests
@@ -482,4 +479,69 @@ class InvalidRequestArea(InvalidRequest):
 
 class InvalidRequestTime(InvalidRequest):
     pass
+
+
+class TaskRequestUpdate(TaskRequest):
+    update_all = fields.BooleanField(default=False)
+
+    class Meta:
+        collection_name = "task_request_update"
+        archive_collection = "task_request_update_archive"
+        ignore_unknown_fields = True
+
+
+class TaskRequestsUpdate(TaskRequests):
+    requests = fields.ListField(fields.ReferenceField(TaskRequestUpdate))
+
+    objects = RequestManager()
+
+    class Meta:
+        collection_name = "request_update"
+        ignore_unknown_fields = True
+        meta_model = "task-request-update"
+
+class TransportationRequestUpdate(TransportationRequest, TaskRequestUpdate):
+
+    class Meta:
+        collection_name = TaskRequestUpdate.Meta.collection_name
+        archive_collection = TaskRequestUpdate.Meta.archive_collection
+        ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
+        task_type = TransportationRequest.Meta.task_type
+
+
+class NavigationRequestUpdate(NavigationRequest, TaskRequestUpdate):
+
+    class Meta:
+        collection_name = TaskRequestUpdate.Meta.collection_name
+        archive_collection = TaskRequestUpdate.Meta.archive_collection
+        ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
+        task_type = NavigationRequest.Meta.task_type
+
+class DefaultNavigationREquestUpdate(NavigationRequestUpdate):
+
+    class Meta:
+        collection_name = TaskRequestUpdate.Meta.collection_name
+        archive_collection = TaskRequestUpdate.Meta.archive_collection
+        ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
+        task_type = DefaultNavigationRequest.Meta.task_type
+
+
+class GuidanceRequestUpdate(NavigationRequestUpdate):
+
+    class Meta:
+        collection_name = TaskRequestUpdate.Meta.collection_name
+        archive_collection = TaskRequestUpdate.Meta.archive_collection
+        ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
+        task_type = GuidanceRequest.Meta.task_type
+
+
+class DisinfectionRequestUpdate(DisinfectionRequest, TaskRequestUpdate):
+
+    class Meta:
+        collection_name = TaskRequestUpdate.Meta.collection_name
+        archive_collection = TaskRequestUpdate.Meta.archive_collection
+        ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
+        task_type = DisinfectionRequest.Meta.task_type
+
+
 
