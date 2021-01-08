@@ -420,11 +420,11 @@ class Task(MongoModel):
             return actions
 
     def to_request(self, **kwargs):
-        request_type = kwargs.pop("_cls").split('.')[-1]
+        request_type = kwargs.pop("request_type")
         request_cls = getattr(requests, request_type)
-        ignore_attrs = ["task_id", "uid"]
+        ignore_attrs = ["task_id", "event", "_id"]
 
-        kwargs = self.request.parse_dict(**kwargs)
+        kwargs = request_cls.parse_dict(**kwargs)
 
         for attr in self.request.__dict__['_data'].__dict__['_members']:
             if attr not in kwargs and attr not in ignore_attrs:
@@ -438,9 +438,6 @@ class Task(MongoModel):
 
     def to_icalendar_event(self):
         dtstart = self.request.earliest_start_time.utc_time
-        # from utc time to timezone
-
-        # event.add('dtstart', datetime.now(tz=pytz.timezone('Europe/Berlin')), )
 
         # The dtend assumes that the task duration is mean + 2stdev
         estimated_duration = self.work_time.mean + 2* self.work_time.standard_dev
