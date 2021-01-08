@@ -5,6 +5,7 @@ from fmlib.utils.messages import Document
 from icalendar import Calendar, Event as ICalendarEvent
 from icalendar.prop import vRecur, vDDDTypes
 from pymodm import fields, MongoModel
+from pymodm.context_managers import switch_collection
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
@@ -36,6 +37,7 @@ class Event(MongoModel):
     objects = EventManager()
 
     class Meta:
+        archive_collection = "event_archive"
         ignore_unknown_fields = True
 
     def save(self):
@@ -43,6 +45,11 @@ class Event(MongoModel):
             super().save(cascade=True)
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
+
+    def archive(self):
+        with switch_collection(self, Event.Meta.archive_collection):
+            super().save()
+        self.delete()
 
     @classmethod
     def create_new(cls, **kwargs):
