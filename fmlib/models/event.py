@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 import dateutil.parser
@@ -64,7 +65,12 @@ class Event(MongoModel):
         if exdate:
             parsed_exdate = list()
             for d in exdate:
-                parsed_exdate.append(dateutil.parser.parse(d.isoformat()))
+                if isinstance(d, str):
+                    parsed_exdate.append(dateutil.parser.parse(d))
+                elif isinstance(d, datetime.date):
+                    parsed_exdate.append(dateutil.parser.parse(d.isoformat()))
+                elif isinstance(d, datetime.datetime):
+                    parsed_exdate.append(d)
             kwargs.update(exdate=parsed_exdate)
 
         event = cls(**kwargs)
@@ -89,6 +95,7 @@ class Event(MongoModel):
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
         dict_repr["uid"] = str(dict_repr.pop('_id'))
         if dict_repr.get("exdate"):
             parsed_exdate = list()
@@ -98,7 +105,7 @@ class Event(MongoModel):
         return dict_repr
 
     @classmethod
-    def from_dict(cls, **kwargs):
+    def parse_dict(cls, **kwargs):
         if "exdate" in kwargs:
             parsed_exdate = list()
             for d in kwargs.get("exdates"):
