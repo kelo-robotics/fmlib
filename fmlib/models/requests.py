@@ -110,7 +110,7 @@ class TaskRequest(MongoModel):
 
     @classmethod
     def parse_dict(cls, **kwargs):
-        return Event.from_dict(**kwargs)
+        return Event.parse_dict(**kwargs)
 
     @classmethod
     def get_task_requests(cls):
