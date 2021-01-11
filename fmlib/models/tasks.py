@@ -519,7 +519,7 @@ class Task(MongoModel):
         return tasks
 
     @classmethod
-    def get_tasks(cls, robot_id=None, status=None):
+    def get_tasks(cls, robot_id=None, status=None, recurrent=False):
         if status:
             tasks = cls.get_tasks_by_status(status)
         else:
@@ -527,6 +527,9 @@ class Task(MongoModel):
 
         if robot_id:
             tasks = [task for task in tasks if robot_id in task.assigned_robots]
+
+        if recurrent:
+            tasks = [task for task in tasks if task.is_recurrent()]
 
         return tasks
 
