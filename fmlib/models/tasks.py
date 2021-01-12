@@ -432,8 +432,6 @@ class Task(MongoModel):
         kwargs.update(parent_task_id=self.task_id)
 
         request = request_cls.create_new(**kwargs)
-        self.save()
-
         return request
 
     def to_icalendar_event(self):
