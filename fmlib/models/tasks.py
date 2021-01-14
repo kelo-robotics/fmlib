@@ -87,9 +87,10 @@ class TimepointConstraint(EmbeddedMongoModel):
     latest_time = fields.DateTimeField()
 
     def __str__(self):
-        to_print = ""
-        to_print += "[{}, {}]".format(self.earliest_time.isoformat(), self.latest_time.isoformat())
-        return to_print
+        return "[{}, {}]".format(self.earliest_time.isoformat(), self.latest_time.isoformat())
+
+    def to_str(self):
+        return "{}_to_{}".format(self.earliest_time.isoformat(), self.latest_time.isoformat())
 
     @classmethod
     def from_payload(cls, payload):
@@ -514,6 +515,15 @@ class Task(MongoModel):
         task_ids = [request.task_id for request in requests.TaskRequest.get_task_requests_by_event(event_uid)]
         for task_id in task_ids:
             tasks.append(Task.get_task(task_id))
+        return tasks
+
+    @classmethod
+    def filter_by_time(cls, tasks, earliest_time=None, latest_time=None):
+        # Filters the given list of tasks to contain only tasks that have start times within [earliest, latest]
+        if earliest_time:
+            tasks = [task for task in tasks if TimeStamp.from_datetime(task.earliest_start_time) >= earliest_time]
+        if latest_time:
+            tasks = [task for task in tasks if TimeStamp.from_datetime(task.latest_start_time) <= latest_time]
         return tasks
 
     @classmethod
