@@ -51,6 +51,7 @@ class TaskRequest(MongoModel):
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
+    map = fields.CharField()
     valid = fields.BooleanField()
     event = fields.ReferenceField(Event, blank=True)
 
@@ -99,9 +100,9 @@ class TaskRequest(MongoModel):
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
-        elif not path_planner.is_valid_location(self.start_location):
+        elif not path_planner.is_valid_location(self.map, self.start_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
-        elif not path_planner.is_valid_location(self.finish_location):
+        elif not path_planner.is_valid_location(self.map, self.finish_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
 
     @staticmethod
@@ -223,13 +224,14 @@ class TransportationRequest(TaskRequest):
         return request
 
     @classmethod
-    def from_recurring_event(cls, event):
+    def from_recurring_event(cls, map, event):
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time.postpone(event.start_delta)
 
-        return cls.create_new(event=event.uid,
+        return cls.create_new(map=map,
+                              event=event.uid,
                               pickup_location=event.pickup_location,
                               delivery_location=event.delivery_location,
                               earliest_pickup_time=earliest_pickup_time,
@@ -318,13 +320,14 @@ class NavigationRequest(TaskRequest):
         return request
 
     @classmethod
-    def from_recurring_event(cls, event):
+    def from_recurring_event(cls, map, event):
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time.postpone(event.start_delta)
 
-        return cls.create_new(event=event.uid,
+        return cls.create_new(map=map,
+                              event=event.uid,
                               start_location=event.start_location,
                               goal_location=event.goal_location,
                               earliest_arrival_time=earliest_arrival_time,
@@ -410,13 +413,14 @@ class DisinfectionRequest(TaskRequest):
         return request
 
     @classmethod
-    def from_recurring_event(cls, event):
+    def from_recurring_event(cls, map, event):
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time.postpone(event.start_delta)
 
-        return cls.create_new(event=event.uid,
+        return cls.create_new(map=map,
+                              event=event.uid,
                               area=event.area,
                               earliest_start_time=earliest_start_time,
                               latest_start_time=latest_start_time)
@@ -437,15 +441,15 @@ class DisinfectionRequest(TaskRequest):
     def validate_request(self, path_planner, complete_request=True):
         if self.dose not in [DisinfectionDose.HIGH, DisinfectionDose.NORMAL, DisinfectionDose.LOW]:
             raise InvalidRequest("%s is not a valid disinfection dose " % self.dose)
-        if not path_planner.is_valid_area(self.area):
+        if not path_planner.is_valid_area(self.map, self.area):
             raise InvalidRequestArea("%s is not a valid area." % self.area)
         if complete_request:
             self.complete_request(path_planner)
         super().validate_request(path_planner, complete_request)
 
     def complete_request(self, path_planner):
-        self.start_location = path_planner.get_start_location(self.area)
-        self.finish_location = path_planner.get_finish_location(self.area)
+        self.start_location = path_planner.get_start_location(self.map, self.area)
+        self.finish_location = path_planner.get_finish_location(self.map, self.area)
         self.save()
 
     def to_dict(self):
