@@ -6,7 +6,7 @@ import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
 from fmlib.models import requests
-from fmlib.models.actions import Action, ActionProgress, Duration
+from fmlib.models.actions import Action, ActionProgress, EstimatedDuration
 from fmlib.models.environment import Position
 from fmlib.models.timetable import Timetable
 from fmlib.utils.messages import Document
@@ -114,16 +114,16 @@ class TimepointConstraint(EmbeddedMongoModel):
 class TemporalConstraints(EmbeddedMongoModel):
     start = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     finish = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
-    work_time = fields.EmbeddedDocumentField(Duration)
-    travel_time = fields.EmbeddedDocumentField(Duration)
+    work_time = fields.EmbeddedDocumentField(EstimatedDuration)
+    travel_time = fields.EmbeddedDocumentField(EstimatedDuration)
 
     @classmethod
     def from_payload(cls, payload):
         document = Document.from_payload(payload)
         document['start'] = TimepointConstraint.from_payload(document.get('start'))
         document['finish'] = TimepointConstraint.from_payload(document.get('finish'))
-        document['work_time'] = Duration.from_payload(document.get('work_time'))
-        document['travel_time'] = Duration.from_payload(document.get('travel_time'))
+        document['work_time'] = EstimatedDuration.from_payload(document.get('work_time'))
+        document['travel_time'] = EstimatedDuration.from_payload(document.get('travel_time'))
         temporal_constraints = cls.from_document(document)
         return temporal_constraints
 
@@ -201,7 +201,7 @@ class Task(MongoModel):
         elif 'constraints' not in kwargs.keys():
             start = TimepointConstraint(earliest_time=TimeStamp().to_datetime(),
                                         latest_time=TimeStamp(delta=timedelta(minutes=1)).to_datetime())
-            temporal = TemporalConstraints(start=start, work_time=Duration(), travel_time=Duration())
+            temporal = TemporalConstraints(start=start, work_time=EstimatedDuration(), travel_time=EstimatedDuration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
         kwargs.update(scheduled_time=TimepointConstraint())
         task = cls(**kwargs)
@@ -252,10 +252,11 @@ class Task(MongoModel):
         dict_repr = self.to_son().to_dict()
         dict_repr["task_id"] = str(dict_repr.pop('_id'))
         dict_repr["constraints"] = self.constraints.to_dict()
-        if dict_repr.get("departure_time"):
-            dict_repr["departure_time"] = self.departure_time.isoformat()
-        if dict_repr.get("finish_time"):
-            dict_repr["finish_time"] = self.finish_time.isoformat()
+        if dict_repr.get("plan"):
+            for plan in dict_repr["plan"]:
+                for action in plan["actions"]:
+                    action.pop("estimated_duration")
+                    action.pop("_cls")
         dict_repr["status"] = self.status.status
         return dict_repr
 
@@ -372,7 +373,7 @@ class Task(MongoModel):
 
     def unassign_robots(self, api=None):
         self.assigned_robots = list()
-        self.travel_time = Duration()
+        self.travel_time = EstimatedDuration()
         self.plan[0].robot = None
         self.save()
         self.update_status(TaskStatusConst.UNALLOCATED, api)
@@ -573,8 +574,8 @@ class TransportationTask(Task):
         pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time.utc_time,
                                      latest_time=request.latest_pickup_time.utc_time)
         temporal = TemporalConstraints(start=pickup,
-                                       work_time=Duration(),
-                                       travel_time=Duration())
+                                       work_time=EstimatedDuration(),
+                                       travel_time=EstimatedDuration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
@@ -597,8 +598,8 @@ class NavigationTask(Task):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
                                       latest_time=request.latest_arrival_time.utc_time)
         temporal = TemporalConstraints(start=arrival,
-                                       work_time=Duration(),
-                                       travel_time=Duration())
+                                       work_time=EstimatedDuration(),
+                                       travel_time=EstimatedDuration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
@@ -623,8 +624,8 @@ class GuidanceTask(Task):
         arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
                                       latest_time=request.latest_arrival_time.utc_time)
         temporal = TemporalConstraints(start=arrival,
-                                       work_time=Duration(),
-                                       travel_time=Duration())
+                                       work_time=EstimatedDuration(),
+                                       travel_time=EstimatedDuration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
@@ -646,8 +647,8 @@ class DisinfectionTask(Task):
         start = TimepointConstraint(earliest_time=request.earliest_start_time.utc_time,
                                     latest_time=request.latest_start_time.utc_time)
         temporal = TemporalConstraints(start=start,
-                                       work_time=Duration(),
-                                       travel_time=Duration())
+                                       work_time=EstimatedDuration(),
+                                       travel_time=EstimatedDuration())
         constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task

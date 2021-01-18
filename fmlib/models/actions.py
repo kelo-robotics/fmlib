@@ -18,7 +18,7 @@ class ActionQuerySet(QuerySet):
 ActionManager = Manager.from_queryset(ActionQuerySet)
 
 
-class Duration(EmbeddedMongoModel):
+class EstimatedDuration(EmbeddedMongoModel):
     mean = fields.FloatField()
     variance = fields.FloatField()
 
@@ -50,7 +50,7 @@ class Action(MongoModel, EmbeddedMongoModel):
 
     action_id = fields.UUIDField(primary_key=True)
     type = fields.CharField()
-    duration = fields.EmbeddedDocumentField(Duration, blank=True)
+    estimated_duration = fields.EmbeddedDocumentField(EstimatedDuration, blank=True)
     pre_task_action = fields.BooleanField(default=False)
 
     objects = ActionManager()
@@ -69,9 +69,9 @@ class Action(MongoModel, EmbeddedMongoModel):
         return action
 
     def update_duration(self, mean, variance, save_in_db=True):
-        if not self.duration:
-            self.duration = Duration()
-        self.duration.update(mean, variance)
+        if not self.estimated_duration:
+            self.estimated_duration = EstimatedDuration()
+        self.estimated_duration.update(mean, variance)
         if save_in_db:
             self.save()
 
@@ -136,7 +136,7 @@ class Navigation(Action):
 
 
 class Standstill(Action):
-    pass
+    duration = fields.FloatField()
 
 
 class WallFollowing(Action):
