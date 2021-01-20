@@ -116,6 +116,7 @@ class TemporalConstraints(EmbeddedMongoModel):
     finish = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     work_time = fields.EmbeddedDocumentField(EstimatedDuration)
     travel_time = fields.EmbeddedDocumentField(EstimatedDuration)
+    alternative_timeslot = fields.BooleanField(default=False)
 
     @classmethod
     def from_payload(cls, payload):
@@ -138,7 +139,6 @@ class TemporalConstraints(EmbeddedMongoModel):
 
 
 class TaskConstraints(EmbeddedMongoModel):
-    hard = fields.BooleanField(default=True)
     temporal = fields.EmbeddedDocumentField(TemporalConstraints)
 
     @classmethod
@@ -266,7 +266,7 @@ class Task(MongoModel):
 
     @classmethod
     def from_request(cls, request, **kwargs):
-        constraints = TaskConstraints(hard=request.hard_constraints)
+        constraints = TaskConstraints()
         task = cls.create_new(request=request, constraints=constraints)
         return task
 
@@ -282,11 +282,15 @@ class Task(MongoModel):
 
     @property
     def hard_constraints(self):
-        return self.constraints.hard
+        return self.request.hard_constraints
 
-    @hard_constraints.setter
-    def hard_constraints(self, boolean):
-        self.constraints.hard = boolean
+    @property
+    def alternative_timeslot(self):
+        return self.constraints.temporal.alternative_timeslot
+
+    @alternative_timeslot.setter
+    def alternative_timeslot(self, boolean):
+        self.constraints.temporal.alternative_timeslot = boolean
         self.save()
 
     @property
@@ -576,7 +580,7 @@ class TransportationTask(Task):
         temporal = TemporalConstraints(start=pickup,
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
-        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        constraints = TaskConstraints(temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
@@ -600,7 +604,7 @@ class NavigationTask(Task):
         temporal = TemporalConstraints(start=arrival,
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
-        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        constraints = TaskConstraints(temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
@@ -626,7 +630,7 @@ class GuidanceTask(Task):
         temporal = TemporalConstraints(start=arrival,
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
-        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        constraints = TaskConstraints(temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
@@ -649,7 +653,7 @@ class DisinfectionTask(Task):
         temporal = TemporalConstraints(start=start,
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
-        constraints = TaskConstraints(hard=request.hard_constraints, temporal=temporal)
+        constraints = TaskConstraints(temporal=temporal)
         task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
@@ -731,7 +735,8 @@ class TaskStatus(MongoModel):
     archived_status = [TaskStatusConst.COMPLETED,
                        TaskStatusConst.CANCELED,
                        TaskStatusConst.ABORTED,
-                       TaskStatusConst.FAILED]
+                       TaskStatusConst.FAILED,
+                       TaskStatusConst.OVERDUE]
 
     in_timetable = [TaskStatusConst.PLANNED,
                     TaskStatusConst.ALLOCATED,
