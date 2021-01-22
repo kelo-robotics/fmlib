@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta
 
@@ -15,17 +16,26 @@ from fmlib.utils.messages import MessageFactory
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
+from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
-import time
 
 mf = MessageFactory()
 
 
 class TaskQuerySet(QuerySet):
+
+    def validate_model(self, task):
+        try:
+            task.full_clean()
+            return task
+        except ValidationError:
+            print(f"Task {task.task_id} has a deprecated format")
+            task.deprecate()
+            raise
 
     def get_task(self, task_id):
         """Return a task object matching to a task_id.
@@ -35,48 +45,42 @@ class TaskQuerySet(QuerySet):
                 task_id = uuid.UUID(task_id)
             except ValueError as e:
                 raise e
-
-        return self.get({'_id': task_id})
+        task = self.get({'_id': task_id})
+        return self.validate_model(task)
 
 
 class TaskStatusQuerySet(QuerySet):
 
+    def validate_model(self, task_status):
+        try:
+            task_status.full_clean()
+            return task_status
+        except ValidationError:
+            print(f"Task status {task_status.task_id} has a deprecated format")
+            task_status.deprecate()
+            raise
+
+    def get_task_status(self, task_id):
+        """Return a task_status object matching to a task_id.
+        """
+        if isinstance(task_id, str):
+            try:
+                task_id = uuid.UUID(task_id)
+            except ValueError as e:
+                raise e
+        task_status = self.get({'_id': task_id})
+        return self.validate_model(task_status)
+
+
     def by_status(self, status):
-        return self.raw({"status": status})
-
-    def unallocated(self):
-        return self.raw({"status": TaskStatusConst.UNALLOCATED})
-
-    def allocated(self):
-        return self.raw({"status": TaskStatusConst.ALLOCATED})
-
-    def planned(self):
-        return self.raw({"status": TaskStatusConst.PLANNED})
-
-    def scheduled(self):
-        return self.raw({"status": TaskStatusConst.SCHEDULED})
-
-    def shipped(self):
-        return self.raw({"status": TaskStatusConst.DISPATCHED})
-
-    def ongoing(self):
-        return self.raw({"status": TaskStatusConst.ONGOING})
-
-    def completed(self):
-        return self.raw({"status": TaskStatusConst.COMPLETED})
-
-    def aborted(self):
-        return self.raw({"status": TaskStatusConst.ABORTED})
-
-    def failed(self):
-        return self.raw({"status": TaskStatusConst.FAILED})
-
-    def canceled(self):
-        return self.raw({"status": TaskStatusConst.CANCELED})
-
-    def preempted(self):
-        return self.raw({"status": TaskStatusConst.PREEMPTED})
-
+        task_status = [t for t in self.raw({"status": status})]
+        invalid_task_status = list()
+        for t in task_status:
+            try:
+                self.validate_model(t)
+            except ValueError:
+                invalid_task_status.append(t)
+        return [t for t in task_status if t not in invalid_task_status]
 
 TaskManager = Manager.from_queryset(TaskQuerySet)
 TaskStatusManager = Manager.from_queryset(TaskStatusQuerySet)
@@ -251,8 +255,9 @@ class Task(MongoModel):
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr["task_id"] = str(dict_repr.pop('_id'))
-        dict_repr["constraints"] = self.constraints.to_dict()
-        if dict_repr.get("plan"):
+        if "constraints" in dict_repr:
+            dict_repr["constraints"] = self.constraints.to_dict()
+        if "plan" in dict_repr:
             for plan in dict_repr["plan"]:
                 for action in plan["actions"]:
                     action.pop("estimated_duration")
@@ -346,17 +351,45 @@ class Task(MongoModel):
         return earliest_task
 
     def archive(self):
-        self.request.archive()
         with switch_collection(self, Task.Meta.archive_collection):
             super().save()
         self.delete()
+
+    def deprecate(self):
+        """ The task has a deprecated format. Remove the task from the "task" collection and store it in the
+        "task_archive" collection. Only the fields that remain valid are stored in the archive_collection.
+        (also archive other models associated with the task, i.e. request and task_status)
+        """
+        try:
+            task_status = Task.get_task_status(self.task_id)
+            task_status.status = TaskStatusConst.DEPRECATED
+            task_status.archive()
+
+            error_dict = {}
+            for field in self._mongometa.get_fields():
+                try:
+                    field_value = field.value_from_object(self)
+                    field_empty = field.is_undefined(self)
+                    if field_empty and field.required:
+                        setattr(self, field.attname, None)
+                    elif not field_empty:
+                        field.validate(field_value)
+                except Exception as exc:
+                    delattr(self, field.attname)
+
+            self.archive()
+
+        except DoesNotExist:
+            # Task status is not in the "task_status" collection
+            pass
+
 
     def update_status(self, status, api=None):
         try:
             task_status = Task.get_task_status(self.task_id)
             task_status.status = status
         except DoesNotExist:
-            task_status = TaskStatus(task=self.task_id, status=status)
+            task_status = TaskStatus(task_id=self.task_id, status=status)
         if status in TaskStatus.archived_status:
             task_status.archive()
             self.archive()
@@ -469,50 +502,61 @@ class Task(MongoModel):
         return cls.objects.get_task(task_id)
 
     @classmethod
+    def get_all_tasks(cls):
+        tasks = cls.objects.all()
+        deprecated_tasks = list()
+        for task in tasks:
+            try:
+                cls.objects.validate_model(task)
+            except ValidationError:
+                deprecated_tasks.append(task)
+        return [task for task in tasks if task not in deprecated_tasks]
+
+    @classmethod
     def get_archived_task(cls, task_id):
         with switch_collection(cls, cls.Meta.archive_collection):
-            return cls.objects.get_task(task_id)
+            return cls.get_task(task_id)
 
     @staticmethod
     def get_task_status(task_id):
-        if isinstance(task_id, str):
-            task_id = uuid.UUID(task_id)
         try:
-            task_status = TaskStatus.objects.get({'_id': task_id})
+            return TaskStatus.objects.get_task_status(task_id)
         except DoesNotExist:
-            try:
-                task_status = Task.get_archived_task_status(task_id)
-            except DoesNotExist:
-                raise
-        return task_status
+            return Task.get_archived_task_status(task_id)
 
     @staticmethod
     def get_archived_task_status(task_id):
-        if isinstance(task_id, str):
-            task_id = uuid.UUID(task_id)
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-            try:
-                task_status = TaskStatus.objects.get({'_id': task_id})
-            except DoesNotExist:
-                raise
-
-        with switch_collection(Task, Task.Meta.archive_collection):
-            task = Task.get_task(task_id)
-            task_status.task = task
-            return task_status
+            return TaskStatus.objects.get_task_status(task_id)
 
     @staticmethod
     def get_tasks_by_status(status):
-        tasks_by_status = [status.task for status in TaskStatus.objects.by_status(status)]
-        with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-            task_ids = [status.to_son().to_dict()['_id'] for status in TaskStatus.objects.by_status(status)]
-            with switch_collection(Task, Task.Meta.archive_collection):
-                tasks_by_status.extend([Task.get_task(task_id) for task_id in task_ids])
-        return tasks_by_status
+        tasks = list()
+
+        if status in TaskStatus.archived_status:
+            with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
+                task_ids = [status.task_id for status in TaskStatus.objects.by_status(status)]
+            for task_id in task_ids:
+                try:
+                    task = Task.get_archived_task(task_id)
+                    tasks.append(task)
+                except ValidationError:
+                    continue
+        else:
+            task_ids = [status.task_id for status in TaskStatus.objects.by_status(status)]
+
+            for task_id in task_ids:
+                try:
+                    task = Task.get_task(task_id)
+                    tasks.append(task)
+                except ValidationError:
+                    continue
+
+        return tasks
 
     @classmethod
     def get_tasks_by_robot(cls, robot_id):
-        return [task for task in cls.objects.all() if robot_id in task.assigned_robots]
+        return [task for task in cls.get_all_tasks() if robot_id in task.assigned_robots]
 
     @classmethod
     def get_tasks_by_event(cls, event_uid):
@@ -536,7 +580,7 @@ class Task(MongoModel):
         if status:
             tasks = cls.get_tasks_by_status(status)
         else:
-            tasks = [task for task in cls.objects.all()]
+            tasks = cls.get_all_tasks()
 
         if robot_id:
             tasks = [task for task in tasks if robot_id in task.assigned_robots]
@@ -725,7 +769,7 @@ class TaskProgress(EmbeddedMongoModel):
 
 
 class TaskStatus(MongoModel):
-    task = fields.ReferenceField(Task, primary_key=True, required=True)
+    task_id = fields.UUIDField(primary_key=True)
     status = fields.IntegerField(default=TaskStatusConst.UNALLOCATED)
     delayed = fields.BooleanField(default=False)
     progress = fields.EmbeddedDocumentField(TaskProgress)
@@ -736,7 +780,8 @@ class TaskStatus(MongoModel):
                        TaskStatusConst.CANCELED,
                        TaskStatusConst.ABORTED,
                        TaskStatusConst.FAILED,
-                       TaskStatusConst.OVERDUE]
+                       TaskStatusConst.OVERDUE,
+                       TaskStatusConst.DEPRECATED]
 
     in_timetable = [TaskStatusConst.PLANNED,
                     TaskStatusConst.ALLOCATED,
@@ -752,6 +797,25 @@ class TaskStatus(MongoModel):
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
             super().save()
         self.delete()
+
+    def deprecate(self):
+        """ The task status has a deprecated format. Remove the task_status from the "task_status" collection and store
+         it in the "task_status_archive" collection. Only the fields that remain valid are stored in the archive_collection.
+        (also archive other models associated with the task_status, i.e. task)
+
+        """
+        try:
+            task = Task.get_task(self.task_id)
+            # The task had a valid format
+            task.archive()
+
+        except ValidationError:
+            # get_task deprecates the task (including the task_status) if it has an invalid format and
+            # re-throws the ValidationError exception
+            pass
+        except DoesNotExist:
+            # Task is not in the "task" collection
+            pass
 
     def update_progress(self, action_id, action_status, robot_pose, **kwargs):
         self.refresh_from_db()
