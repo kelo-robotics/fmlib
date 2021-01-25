@@ -341,7 +341,7 @@ class Task(MongoModel):
     @classmethod
     def get_earliest_task(cls, tasks=None):
         if tasks is None:
-            tasks = [task for task in cls.objects.all()]
+            tasks = [task for task in cls.get_all_tasks()]
         earliest_time = datetime.max
         earliest_task = None
         for task in tasks:
@@ -351,6 +351,8 @@ class Task(MongoModel):
         return earliest_task
 
     def archive(self):
+        if hasattr(self, "request"):
+            self.request.archive()
         with switch_collection(self, Task.Meta.archive_collection):
             super().save()
         self.delete()
@@ -365,7 +367,6 @@ class Task(MongoModel):
             task_status.status = TaskStatusConst.DEPRECATED
             task_status.archive()
 
-            error_dict = {}
             for field in self._mongometa.get_fields():
                 try:
                     field_value = field.value_from_object(self)
@@ -375,8 +376,10 @@ class Task(MongoModel):
                     elif not field_empty:
                         field.validate(field_value)
                 except Exception as exc:
-                    delattr(self, field.attname)
-
+                    if field.attname == "request":
+                        self.request.deprecate()
+                    else:
+                        delattr(self, field.attname)
             self.archive()
 
         except DoesNotExist:
@@ -591,24 +594,23 @@ class Task(MongoModel):
         return tasks
 
     @classmethod
-    def get_tasks_from_request(cls, request_id):
-        tasks = list()
-        task_requests = requests.TaskRequests.get_request(request_id)
-        for request in task_requests.requests:
-            tasks.append(cls.get_task(request.task_id))
-        return tasks
+    def get_task_by_request(cls, request_id):
+        request = requests.TaskRequest.get_request(request_id)
+        return cls.get_task(request.task_id)
 
-    def get_parent_tasks(self, tasks):
+    def get_parent_tasks(self, tasks=list()):
         if self.request.parent_task_id:
-            task = Task.get_task(self.request.parent_task_id)
-            tasks.append(task)
-            if task.request.parent_task_id:
+            try:
+                task = Task.get_archived_task(self.request.parent_task_id)
+                tasks.append(task)
                 task.get_parent_tasks(tasks)
+            except DoesNotExist:
+                pass
         return tasks
 
     def update_progress(self, action_id, action_status, robot_pose, **kwargs):
-        status = TaskStatus.objects.get({"_id": self.task_id})
-        status.update_progress(action_id, action_status, robot_pose, **kwargs)
+        task_status = Task.get_task_status(self.task_id)
+        task_status.update_progress(self, action_id, action_status, robot_pose, **kwargs)
 
 
 class TransportationTask(Task):
@@ -817,11 +819,11 @@ class TaskStatus(MongoModel):
             # Task is not in the "task" collection
             pass
 
-    def update_progress(self, action_id, action_status, robot_pose, **kwargs):
+    def update_progress(self, task, action_id, action_status, robot_pose, **kwargs):
         self.refresh_from_db()
         if not self.progress:
             self.progress = TaskProgress()
-            self.progress.initialize(action_id, self.task.plan)
+            self.progress.initialize(action_id, task.plan)
             self.save()
         self.progress.update(action_id, action_status, robot_pose, **kwargs)
         self.save(cascade=True)
