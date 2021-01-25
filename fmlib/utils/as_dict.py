@@ -2,8 +2,9 @@
 https://realpython.com/inheritance-composition-python/#mixing-features-with-mixin-classes
 """
 import uuid
-
 from datetime import datetime
+
+from fmlib.utils.messages import Document
 
 
 class AsDictMixin:
@@ -35,31 +36,13 @@ class AsDictMixin:
     def is_internal(prop):
         return prop.startswith('_')
 
-    # @classmethod
-    # def from_payload(cls, payload):
-    #     document = Document.from_payload(payload)
-    #     document.pop("metamodel", None)
-    #     return cls.from_dict(document)
-    #
-    # @classmethod
-    # def from_dict(cls, dict_repr):
-    #     attrs = cls.to_attrs(dict_repr)
-    #     return cls(**attrs)
-    #
-    # @classmethod
-    # def to_attrs(cls, dict_repr):
-    #     attrs = dict()
-    #     for key, value in dict_repr.items():
-    #         if value is not None:
-    #             attrs[key] = cls._get_value(key, value)
-    #     return attrs
-    #
-    # @classmethod
-    # def _get_value(cls, key, value):
-    #     if key in ['task_id', 'round_id', 'action_id']:
-    #         return from_str(value)
-    #     elif key in ['ztp', 'earliest_admissible_time', 'earliest_start_time']:
-    #         return TimeStamp.from_str(value)
-    #     else:
-    #         return value
-    #
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        document.pop("metamodel", None)
+        return cls.from_dict(document)
+
+    @classmethod
+    def from_dict(cls, dict_repr):
+        attrs = cls.to_attrs(dict_repr)
+        return cls(**attrs)
