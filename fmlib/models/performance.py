@@ -113,27 +113,21 @@ class RobotPerformance(MongoModel):
 
     @classmethod
     def create_new(cls, robot_id, **kwargs):
-        api = kwargs.pop("api")
         performance = cls(robot_id=robot_id)
         performance.save()
-        if api:
-            performance.api = api
         return performance
 
-    def update_timetables(self, timetable, archived_timetable):
+    def update_timetables(self, timetable):
         if not self.timetables:
             self.timetables = list()
         timetable_model = timetable.to_model()
         self.timetables.append(timetable_model)
-        tasks, task_ids = timetable.get_tasks_for_timetable_update(archived_timetable)
-        timetable_model.publish_timetable_update(timetable.robot_id, tasks, self.api)
         self.save()
 
     @classmethod
     def get_robot(cls, robot_id, **kwargs):
         try:
             performance = cls.objects.get_robot(robot_id)
-            performance.api = kwargs.get("api")
             return performance
         except DoesNotExist:
             return cls.create_new(robot_id, **kwargs)

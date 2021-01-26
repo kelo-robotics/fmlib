@@ -50,17 +50,6 @@ class Timetable(MongoModel):
         except ServerSelectionTimeoutError:
             logging.warning('Could not save models to MongoDB')
 
-    def publish(self, api):
-        msg = mf.create_message(self)
-        api.publish(msg, groups=["ROPOD"])
-
-    @staticmethod
-    def publish_timetable_update(robot_id, tasks, api):
-        header = mf.create_header("timetable-update")
-        payload = mf.create_payload_from_dict({"robot_id": robot_id, "tasks": tasks})
-        msg = Message(payload, header)
-        api.publish(msg, groups=["ROPOD"])
-
     @classmethod
     def get_timetable(cls, robot_id):
         return cls.objects.get_timetable(robot_id)
