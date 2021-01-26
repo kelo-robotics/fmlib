@@ -257,6 +257,7 @@ class Task(MongoModel):
         dict_repr["task_id"] = str(dict_repr.pop('_id'))
         if "constraints" in dict_repr:
             dict_repr["constraints"] = self.constraints.to_dict()
+        dict_repr["request"] = self.request.to_dict()
         if "plan" in dict_repr:
             for plan in dict_repr["plan"]:
                 for action in plan["actions"]:
