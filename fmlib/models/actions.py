@@ -3,19 +3,33 @@ import uuid
 from fmlib.models.environment import Position
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
+from pymodm.errors import DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from ropod.structs.status import ActionStatus
 
 
 class ActionQuerySet(QuerySet):
+
     def get_action(self, action_id):
         if isinstance(action_id, str):
             action_id = uuid.UUID(action_id)
         return self.get({'_id': action_id})
 
+    def by_action_type(self, type):
+        return self.raw({"type": type})
+
 
 ActionManager = Manager.from_queryset(ActionQuerySet)
+
+class ActionProgressQuerySet(QuerySet):
+
+    def get_action_progress(self, action_id):
+        if isinstance(action_id, str):
+            action_id = uuid.UUID(action_id)
+        return self.get({'_id': action_id})
+
+ActionProgressManager = Manager.from_queryset(ActionProgressQuerySet)
 
 
 class EstimatedDuration(EmbeddedMongoModel):
@@ -58,6 +72,10 @@ class Action(MongoModel, EmbeddedMongoModel):
     class Meta:
         ignore_unknown_fields = True
 
+    @property
+    def progress(self):
+        return self.get_action_progress(self.action_id)
+
     @classmethod
     def create_new(cls, **kwargs):
         if 'action_id' not in kwargs.keys():
@@ -75,10 +93,6 @@ class Action(MongoModel, EmbeddedMongoModel):
         if save_in_db:
             self.save()
 
-    @classmethod
-    def get_action(cls, action_id):
-        return cls.objects.get_action(action_id)
-
     def from_action(self):
         kwargs = dict()
         for attr in self.__dict__['_data'].__dict__['_members']:
@@ -86,6 +100,32 @@ class Action(MongoModel, EmbeddedMongoModel):
         kwargs.update(action_id=uuid.uuid4())
         action = self.create_new(**kwargs)
         return action
+
+    @classmethod
+    def get_action(cls, action_id):
+        return cls.objects.get_action(action_id)
+
+    @classmethod
+    def get_actions(cls, type=None):
+        if type:
+            return [action for action in cls.objects.by_action_type(type)]
+        return [action for action in cls.objects.all()]
+
+    @staticmethod
+    def get_action_progress(action_id):
+        return ActionProgress.objects.get_action_progress(action_id)
+
+    def get_action_duration(self):
+        try:
+            action_progress = self.get_action_progress(self.action_id)
+
+            if action_progress.finish_time and action_progress.start_time:
+                return (action_progress.finish_time - action_progress.start_time).total_seconds()
+            # The duration is not known yet (the action has not been executed)
+            return None
+
+        except DoesNotExist:
+            return None
 
 
 class GoTo(Action):
@@ -140,18 +180,32 @@ class Standstill(Action):
 
 
 class WallFollowing(Action):
+    area = fields.CharField()
     start = fields.EmbeddedDocumentField(Position)
     checkpoints = fields.EmbeddedDocumentListField(Position)
     polygon = fields.EmbeddedDocumentListField(Position)
     velocity = fields.FloatField()
+
+    objects = ActionManager()
+
+    @classmethod
+    def get_actions(cls, area=None, velocity=None):
+        actions = super().get_actions(type="WALL_FOLLOWING")
+        if area:
+            actions = [action for action in actions if action.area == area]
+        if velocity:
+            actions = [action for action in actions if action.velocity == velocity]
+        return actions
 
 
 class LampControl(Action):
     switch_on = fields.BooleanField()
 
 
-class ActionProgress(EmbeddedMongoModel):
-    action = fields.ReferenceField(Action)
+class ActionProgress(MongoModel, EmbeddedMongoModel):
+    action_id = fields.UUIDField(primary_key=True)
     status = fields.IntegerField(default=ActionStatus.PLANNED)
     start_time = fields.DateTimeField()
     finish_time = fields.DateTimeField()
+
+    objects = ActionProgressManager()

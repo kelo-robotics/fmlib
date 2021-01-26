@@ -721,7 +721,7 @@ class TaskProgress(EmbeddedMongoModel):
     def update(self, action_id, action_status, robot_pose, **kwargs):
         self.current_pose = robot_pose
         if action_status == ActionStatus.COMPLETED:
-            self.current_action = self._get_next_action(action_id).action.action_id \
+            self.current_action = self._get_next_action(action_id).action_id \
                 if self._get_next_action(action_id) is not None else self.current_action
 
         self.update_action_progress(action_id, action_status, **kwargs)
@@ -752,7 +752,7 @@ class TaskProgress(EmbeddedMongoModel):
 
         idx = None
         for a in self.actions:
-            if a.action.action_id == action_id_:
+            if a.action_id == action_id_:
                 idx = self.actions.index(a)
 
         return idx
