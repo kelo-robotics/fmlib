@@ -459,7 +459,7 @@ class Task(MongoModel):
             actions = list()
             for action_progress in self.status.progress.actions:
                 if action_progress.status != ActionStatus.COMPLETED:
-                    actions.append(action_progress.action)
+                    action = Action.get_action(action_progress.action_id)
             return actions
 
     def to_request(self, **kwargs):
@@ -720,11 +720,15 @@ class TaskProgress(EmbeddedMongoModel):
 
     def update(self, action_id, action_status, robot_pose, **kwargs):
         self.current_pose = robot_pose
-        if action_status == ActionStatus.COMPLETED:
-            self.current_action = self._get_next_action(action_id).action_id \
-                if self._get_next_action(action_id) is not None else self.current_action
-
         self.update_action_progress(action_id, action_status, **kwargs)
+
+        if action_status == ActionStatus.COMPLETED:
+            action_progress = self.get_action(action_id)
+            action_progress.archive()
+
+            next_action = self._get_next_action(action_id)
+            if next_action:
+                self.current_action = next_action.action_id
 
     def update_action_progress(self, action_id, action_status, **kwargs):
         idx = self._get_action_index(action_id)
@@ -797,6 +801,11 @@ class TaskStatus(MongoModel):
         ignore_unknown_fields = True
 
     def archive(self):
+        if hasattr(self, "progress"):
+            for action_progress in self.progress.actions:
+                if action_progress != ActionStatus.COMPLETED:
+                    action_progress.archive()
+
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
             super().save()
         self.delete()

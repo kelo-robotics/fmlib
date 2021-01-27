@@ -3,6 +3,7 @@ import uuid
 from fmlib.models.environment import Position
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
+from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
@@ -61,7 +62,6 @@ class EstimatedDuration(EmbeddedMongoModel):
 
 
 class Action(MongoModel, EmbeddedMongoModel):
-
     action_id = fields.UUIDField(primary_key=True)
     type = fields.CharField()
     estimated_duration = fields.EmbeddedDocumentField(EstimatedDuration, blank=True)
@@ -70,6 +70,7 @@ class Action(MongoModel, EmbeddedMongoModel):
     objects = ActionManager()
 
     class Meta:
+        archive_collection = 'action_archive'
         ignore_unknown_fields = True
 
     @property
@@ -85,6 +86,11 @@ class Action(MongoModel, EmbeddedMongoModel):
         if save_in_db:
             action.save()
         return action
+
+    def archive(self):
+        with switch_collection(self, self.Meta.archive_collection):
+            super().save()
+        self.delete()
 
     def update_duration(self, mean, variance, save_in_db=True):
         if not self.estimated_duration:
@@ -103,7 +109,15 @@ class Action(MongoModel, EmbeddedMongoModel):
 
     @classmethod
     def get_action(cls, action_id):
-        return cls.objects.get_action(action_id)
+        try:
+            return cls.objects.get_action(action_id)
+        except DoesNotExist:
+            return cls.get_archived_action(action_id)
+
+    @classmethod
+    def get_archived_action(cls, action_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.objects.get_action(action_id)
 
     @classmethod
     def get_actions(cls, type=None):
@@ -111,13 +125,25 @@ class Action(MongoModel, EmbeddedMongoModel):
             return [action for action in cls.objects.by_action_type(type)]
         return [action for action in cls.objects.all()]
 
+    @classmethod
+    def get_archived_actions(cls, type=None):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            if type:
+                return [action for action in cls.objects.by_action_type(type)]
+            return [action for action in cls.objects.all()]
+
     @staticmethod
     def get_action_progress(action_id):
         return ActionProgress.objects.get_action_progress(action_id)
 
+    @staticmethod
+    def get_archived_action_progress(action_id):
+        with switch_collection(ActionProgress, ActionProgress.Meta.archive_collection):
+            return ActionProgress.objects.get_action_progress(action_id)
+
     def get_action_duration(self):
         try:
-            action_progress = self.get_action_progress(self.action_id)
+            action_progress = self.get_archived_action_progress(self.action_id)
 
             if action_progress.finish_time and action_progress.start_time:
                 return (action_progress.finish_time - action_progress.start_time).total_seconds()
@@ -197,6 +223,15 @@ class WallFollowing(Action):
             actions = [action for action in actions if action.velocity == velocity]
         return actions
 
+    @classmethod
+    def get_archived_actions(cls, area=None, velocity=None):
+        actions = super().get_archived_actions(type="WALL_FOLLOWING")
+        if area:
+            actions = [action for action in actions if action.area == area]
+        if velocity:
+            actions = [action for action in actions if action.velocity == velocity]
+        return actions
+
 
 class LampControl(Action):
     switch_on = fields.BooleanField()
@@ -209,3 +244,17 @@ class ActionProgress(MongoModel, EmbeddedMongoModel):
     finish_time = fields.DateTimeField()
 
     objects = ActionProgressManager()
+
+    class Meta:
+        archive_collection = 'action_progress_archive'
+        ignore_unknown_fields = True
+
+    def archive(self):
+        try:
+            action = Action.get_action(self.action_id)
+            action.archive()
+        except DoesNotExist:
+            pass
+        with switch_collection(ActionProgress, ActionProgress.Meta.archive_collection):
+            super().save()
+        self.delete()
