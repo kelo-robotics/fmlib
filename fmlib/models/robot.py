@@ -140,7 +140,7 @@ class Robot(MongoModel):
 
     def update_position(self, **kwargs):
         save_in_db = kwargs.pop("save_in_db", True)
-        self.position.update_2d_pose(**kwargs)
+        self.position.update_position(**kwargs)
         if save_in_db:
             self.save()
 
@@ -156,9 +156,11 @@ class Robot(MongoModel):
         return all(i in self.capabilities for i in task.capabilities)
 
     def is_eligible(self, task):
-        if task.request.eligible_robots and self.is_capable(task)\
-                or not task.request.eligible_robots and self.is_capable(task):
-            return True
+        if self.is_capable(task) and self.position.map == task.request.map:
+            if task.request.eligible_robots and self.robot_id in task.request.eligible_robots:
+                return True
+            elif not task.request.eligible_robots:
+                return True
         return False
 
     @classmethod

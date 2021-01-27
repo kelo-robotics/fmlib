@@ -49,6 +49,8 @@ class Position(EmbeddedMongoModel):
     x = fields.FloatField()
     y = fields.FloatField()
     theta = fields.FloatField(default=0)
+    name = fields.CharField()
+    map = fields.CharField()
 
     class Meta:
         ignore_unknown_fields = True
@@ -57,7 +59,8 @@ class Position(EmbeddedMongoModel):
     def __eq__(self, other):
         if not isinstance(other, Position):
             return False
-        return (self.x == other.x
+        return (self.map == other.map
+                and self.x == other.x
                 and self.y == other.y
                 and self.theta == other.theta)
 
@@ -65,12 +68,19 @@ class Position(EmbeddedMongoModel):
         return not self.__eq__(other)
 
     def __str__(self):
-        return "[{}, {}, {}]".format(self.x, self.y, self.theta)
+        to_print = "[{}, {}, {}]".format(self.x, self.y, self.theta)
+        if self.map:
+            to_print += f" map: {self.map}"
+        if self.name:
+            to_print += f" name: {self.name}"
+        return to_print
 
-    def update_2d_pose(self, x, y, theta):
-        self.x = x
-        self.y = y
-        self.theta = theta
+    def update_position(self, **kwargs):
+        self.x = kwargs.get('x')
+        self.y = kwargs.get('y')
+        self.theta = kwargs.get('theta')
+        self.name = kwargs.get('name')
+        self.map = kwargs.get('map')
 
     def get_distance(self, other):
         return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
