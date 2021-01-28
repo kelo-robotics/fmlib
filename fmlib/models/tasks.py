@@ -460,6 +460,7 @@ class Task(MongoModel):
             for action_progress in self.status.progress.actions:
                 if action_progress.status != ActionStatus.COMPLETED:
                     action = Action.get_action(action_progress.action_id)
+                    actions.append(action)
             return actions
 
     def to_request(self, **kwargs):
