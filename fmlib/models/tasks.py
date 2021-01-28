@@ -802,7 +802,7 @@ class TaskStatus(MongoModel):
         ignore_unknown_fields = True
 
     def archive(self):
-        if hasattr(self, "progress"):
+        if self.progress:
             for action_progress in self.progress.actions:
                 if action_progress != ActionStatus.COMPLETED:
                     action_progress.archive()
