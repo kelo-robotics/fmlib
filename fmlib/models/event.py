@@ -61,6 +61,11 @@ class Event(MongoModel):
         else:
             kwargs.update(uid=uuid.uuid4())
 
+        rrule = kwargs.get("rrule")
+        if rrule:
+            rrule = cls.rrule_to_dict(rrule)
+            kwargs.update(rrule=rrule)
+
         exdate = kwargs.get("exdate")
         if exdate:
             parsed_exdate = list()
@@ -75,6 +80,16 @@ class Event(MongoModel):
         event = cls(**kwargs)
         event.save()
         return event
+
+    @classmethod
+    def rrule_to_dict(cls, rrule):
+        if "until" in rrule:
+            rrule["until"] = rrule["until"].isoformat()
+        return rrule
+
+    def rrule_from_dict(self):
+        if "until" in self.rrule:
+            self.rrule["until"] = self.parse_date(self.rrule["until"])
 
     @staticmethod
     def parse_date(d):
@@ -125,6 +140,7 @@ class Event(MongoModel):
 
     def to_icalendar_event(self, **kwargs):
         event = ICalendarEvent()
+        self.rrule_from_dict()
         event.add('rrule', self.rrule)
 
         for exdate in self.exdate:
