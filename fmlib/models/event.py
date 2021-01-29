@@ -4,7 +4,7 @@ import uuid
 import dateutil.parser
 from fmlib.utils.messages import Document
 from icalendar import Calendar, Event as ICalendarEvent
-from icalendar.prop import vRecur, vDDDTypes
+from icalendar.prop import vRecur, vDDDTypes, vDDDLists
 from pymodm import fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.manager import Manager
@@ -64,18 +64,28 @@ class Event(MongoModel):
         exdate = kwargs.get("exdate")
         if exdate:
             parsed_exdate = list()
-            for d in exdate:
-                if isinstance(d, str):
-                    parsed_exdate.append(dateutil.parser.parse(d))
-                elif isinstance(d, datetime.date):
-                    parsed_exdate.append(dateutil.parser.parse(d.isoformat()))
-                elif isinstance(d, datetime.datetime):
-                    parsed_exdate.append(d)
+            if isinstance(exdate, list):
+                for date in exdate:
+                    parsed_exdate.append(cls.parse_date(date))
+            else:
+                parsed_exdate.append(cls.parse_date(exdate))
+
             kwargs.update(exdate=parsed_exdate)
 
         event = cls(**kwargs)
         event.save()
         return event
+
+    @staticmethod
+    def parse_date(d):
+        if isinstance(d, str):
+            d = dateutil.parser.parse(d)
+        elif isinstance(d, datetime.date):
+            d = dateutil.parser.parse(d.isoformat())
+        elif isinstance(d, vDDDLists):
+            for dt in d.dts:
+                d = vDDDTypes.from_ical(dt)
+        return d
 
     @classmethod
     def from_payload(cls, payload):
