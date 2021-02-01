@@ -39,7 +39,9 @@ class Timepoint(EmbeddedMongoModel):
     @classmethod
     def from_payload(cls, payload):
         document = Document.from_payload(payload)
-        document['utc_time'] = dateutil.parser.parse(document.pop("utc_time"))
+        utc_time = dateutil.parser.parse(document.pop("utc_time"))
+        utc_time = utc_time.replace(microsecond=0)
+        document['utc_time'] = utc_time
         timepoint = cls.from_document(document)
         return timepoint
 
