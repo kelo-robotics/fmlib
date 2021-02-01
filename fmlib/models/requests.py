@@ -2,6 +2,7 @@ import sys
 import uuid
 
 import pytz
+from bson.codec_options import CodecOptions
 from fmlib.models.environment import Timepoint
 from fmlib.models.event import Event
 from fmlib.models.users import User
@@ -93,6 +94,7 @@ class TaskRequest(Request):
         collection_name = "task_request"
         archive_collection = "task_request_archive"
         ignore_unknown_fields = True
+        codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
         task_type = "Task"
 
     def archive(self):
