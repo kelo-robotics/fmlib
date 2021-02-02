@@ -1,3 +1,4 @@
+import inspect
 import sys
 import uuid
 
@@ -75,6 +76,11 @@ class Request(MongoModel):
             except ValidationError:
                 deprecated_requests.append(request)
         return valid_requests
+
+    @classmethod
+    def get_all_archived_requests(cls):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.get_all_requests()
 
 
 class TaskRequest(Request):
@@ -162,11 +168,25 @@ class TaskRequest(Request):
         return [task_request for task_request in cls.get_all_requests()]
 
     @classmethod
+    def get_archived_task_requests(cls):
+        return [task_request for task_request in cls.get_all_archived_requests()]
+
+    @classmethod
     def get_task_requests_by_event(cls, event_uid):
         if isinstance(event_uid, str):
             event_uid = uuid.UUID(event_uid)
         task_requests = list()
         for task_request in cls.get_task_requests():
+            if task_request.event and task_request.event.uid == event_uid:
+                task_requests.append(task_request)
+        return task_requests
+
+    @classmethod
+    def get_archived_task_requests_by_event(cls, event_uid):
+        if isinstance(event_uid, str):
+            event_uid = uuid.UUID(event_uid)
+        task_requests = list()
+        for task_request in cls.get_archived_task_requests():
             if task_request.event and task_request.event.uid == event_uid:
                 task_requests.append(task_request)
         return task_requests
@@ -198,6 +218,22 @@ class TaskRequest(Request):
                     delattr(self, field.attname)
         self.archive()
 
+    @staticmethod
+    def get_request_cls_from_icalendar_event(event):
+        for name, request_cls in inspect.getmembers(this_module, inspect.isclass):
+            if 'Meta' in request_cls.__dict__ and \
+                    hasattr(request_cls.__dict__['Meta'], 'task_type') and \
+                    event.task_type == request_cls.__dict__['Meta'].task_type:
+                return request_cls
+
+    def get_common_attrs(self):
+        ignore_attrs = ["task_id", "parent_task_id", "request_id"]
+        kwargs = dict()
+        for attr in self.__dict__['_data'].__dict__['_members']:
+            if attr not in ignore_attrs:
+                kwargs[attr] = getattr(self, attr)
+        return  kwargs
+
 
 class TransportationRequest(TaskRequest):
 
@@ -227,14 +263,17 @@ class TransportationRequest(TaskRequest):
         return request
 
     @classmethod
-    def from_recurring_event(cls, map, event, user_id=None):
+    def from_recurring_event(cls, event, user_id=None):
+        request_type = self.__class__.__name__
+        request_cls = getattr(this_module, request_type)
+        kwargs = super().get_common_attrs()
+
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time.postpone(event.start_delta)
 
-        kwargs = {"map": map,
-                  "event": event.uid,
+        kwargs = {"event": event.uid,
                   "pickup_location":event.pickup_location,
                   "delivery_location":event.delivery_location,
                   "earliest_pickup_time":earliest_pickup_time,
@@ -332,13 +371,16 @@ class NavigationRequest(TaskRequest):
 
     @classmethod
     def from_recurring_event(cls, map, event, user_id=None):
+        request_type = self.__class__.__name__
+        request_cls = getattr(this_module, request_type)
+        kwargs = super().get_common_attrs()
+
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time.postpone(event.start_delta)
 
-        kwargs= {"map": map,
-                 "event": event.uid,
+        kwargs= {"event": event.uid,
                  "start_location": event.start_location,
                  "goal_location":event.goal_location,
                  "earliest_arrival_time":earliest_arrival_time,
@@ -437,22 +479,25 @@ class DisinfectionRequest(TaskRequest):
         request.save()
         return request
 
-    @classmethod
-    def from_recurring_event(cls, map, event, user_id=None):
+    def from_recurring_event(self, event, user_id=None):
+        request_type = self.__class__.__name__
+        request_cls = getattr(this_module, request_type)
+        kwargs = super().get_common_attrs()
+
         timezone_offset = event.start.utcoffset().total_seconds()/60
         earliest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_start_time.postpone(event.start_delta)
 
-        kwargs = {"map":map,
-                  "event":event.uid,
-                  "area":event.area,
-                  "earliest_start_time":earliest_start_time,
-                  "latest_start_time":latest_start_time}
+        kwargs.update({"event": event.uid,
+                       "area":event.area,
+                       "earliest_start_time":earliest_start_time,
+                       "latest_start_time":latest_start_time})
         if user_id:
             kwargs.update(user_id=user_id)
 
-        return cls.create_new(**kwargs)
+        request = request_cls.create_new(**kwargs)
+        return request
 
     def get_velocity(self):
         """ Returns max velocity (m/s) based on the dose """
