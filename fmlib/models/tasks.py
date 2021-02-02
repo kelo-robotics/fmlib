@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -22,6 +23,8 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
+
+this_module = sys.modules[__name__]
 
 mf = MessageFactory()
 
@@ -114,13 +117,18 @@ class TimepointConstraint(EmbeddedMongoModel):
         self.earliest_time = earliest_time
         self.latest_time = latest_time
 
+class AlternativeTimeslot(EmbeddedMongoModel):
+    start = fields.EmbeddedDocumentField(TimepointConstraint, default=TimepointConstraint())
+    finish = fields.EmbeddedDocumentField(TimepointConstraint, default=TimepointConstraint())
+
 
 class TemporalConstraints(EmbeddedMongoModel):
     start = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     finish = fields.EmbeddedDocumentField(TimepointConstraint, blank=True)
     work_time = fields.EmbeddedDocumentField(EstimatedDuration)
     travel_time = fields.EmbeddedDocumentField(EstimatedDuration)
-    alternative_timeslot = fields.BooleanField(default=False)
+    alternative_timeslot = fields.EmbeddedDocumentField(AlternativeTimeslot, blank=True)
+
 
     @classmethod
     def from_payload(cls, payload):
@@ -334,10 +342,20 @@ class Task(MongoModel):
     def start_constraint(self):
         return self.constraints.temporal.start
 
+    @property
+    def alternative_start_time(self):
+        return self.constraints.temporal.alternative_timeslot.start
+
     def update_start_constraint(self, earliest_time, latest_time, save_in_db=True):
         self.start_constraint.update(earliest_time, latest_time)
         if save_in_db:
             self.save()
+
+    def update_alternative_start_time(self, earliest_time, latest_time, save_in_db=True):
+        self.alternative_start_time.update(earliest_time, latest_time)
+        if save_in_db:
+            self.save()
+
 
     @classmethod
     def get_earliest_task(cls, tasks=None):
