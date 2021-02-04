@@ -280,8 +280,16 @@ class Task(MongoModel):
 
     @classmethod
     def from_request(cls, request, **kwargs):
-        constraints = TaskConstraints()
-        task = cls.create_new(request=request, constraints=constraints)
+        earliest_time = kwargs.get("earliest_time", request.earliest_start_time.utc_time)
+        latest_time = kwargs.get("latest_time", request.latest_start_time.utc_time)
+        api = kwargs.get("api")
+        start = TimepointConstraint(earliest_time=earliest_time,
+                                    latest_time=latest_time)
+        temporal = TemporalConstraints(start=start,
+                                       work_time=EstimatedDuration(),
+                                       travel_time=EstimatedDuration())
+        constraints = TaskConstraints(temporal=temporal)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     @property
@@ -370,8 +378,6 @@ class Task(MongoModel):
         return earliest_task
 
     def archive(self):
-        if hasattr(self, "request"):
-            self.request.archive()
         with switch_collection(self, Task.Meta.archive_collection):
             super().save()
         self.delete()
@@ -545,12 +551,18 @@ class Task(MongoModel):
         try:
             return TaskStatus.objects.get_task_status(task_id)
         except DoesNotExist:
-            return Task.get_archived_task_status(task_id)
+            try:
+                return Task.get_archived_task_status(task_id)
+            except DoesNotExist as e:
+                raise e
 
     @staticmethod
     def get_archived_task_status(task_id):
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
-            return TaskStatus.objects.get_task_status(task_id)
+            try:
+                return TaskStatus.objects.get_task_status(task_id)
+            except DoesNotExist as e:
+                raise e
 
     @staticmethod
     def get_tasks_by_status(status):
@@ -584,9 +596,9 @@ class Task(MongoModel):
     @classmethod
     def get_tasks_by_event(cls, event_uid):
         tasks = list()
-        task_ids = [request.task_id for request in requests.TaskRequest.get_task_requests_by_event(event_uid)]
-        for task_id in task_ids:
-            tasks.append(Task.get_task(task_id))
+        for request in requests.TaskRequest.get_task_requests_by_event(event_uid):
+            for task_id in request.task_ids:
+                tasks.append(Task.get_task(task_id))
         return tasks
 
     @classmethod
@@ -614,9 +626,16 @@ class Task(MongoModel):
         return tasks
 
     @classmethod
-    def get_task_by_request(cls, request_id):
+    def get_tasks_by_request(cls, request_id):
+        tasks = list()
+        archived_tasks = list()
         request = requests.TaskRequest.get_request(request_id)
-        return cls.get_task(request.task_id)
+        for task_id in request.task_ids:
+            try:
+                tasks.append(cls.get_task(task_id))
+            except DoesNotExist:
+                archived_tasks.append(cls.get_archived_task(task_id))
+        return tasks, archived_tasks
 
     def get_parent_tasks(self, tasks=list()):
         if self.request.parent_task_id:
@@ -639,17 +658,6 @@ class TransportationTask(Task):
 
     objects = TaskManager()
 
-    @classmethod
-    def from_request(cls, request, api=None):
-        pickup = TimepointConstraint(earliest_time=request.earliest_pickup_time.utc_time,
-                                     latest_time=request.latest_pickup_time.utc_time)
-        temporal = TemporalConstraints(start=pickup,
-                                       work_time=EstimatedDuration(),
-                                       travel_time=EstimatedDuration())
-        constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
-        return task
-
     def to_icalendar_event(self):
         event = super().to_icalendar_event()
         event.add('load-type', self.request.load_type)
@@ -662,17 +670,6 @@ class NavigationTask(Task):
     capabilities = fields.ListField(default=["navigation"])
 
     objects = TaskManager()
-
-    @classmethod
-    def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
-                                      latest_time=request.latest_arrival_time.utc_time)
-        temporal = TemporalConstraints(start=arrival,
-                                       work_time=EstimatedDuration(),
-                                       travel_time=EstimatedDuration())
-        constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
-        return task
 
     def to_icalendar_event(self):
         event = super().to_icalendar_event()
@@ -689,17 +686,6 @@ class GuidanceTask(Task):
 
     objects = TaskManager()
 
-    @classmethod
-    def from_request(cls, request, api=None):
-        arrival = TimepointConstraint(earliest_time=request.earliest_arrival_time.utc_time,
-                                      latest_time=request.latest_arrival_time.utc_time)
-        temporal = TemporalConstraints(start=arrival,
-                                       work_time=EstimatedDuration(),
-                                       travel_time=EstimatedDuration())
-        constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
-        return task
-
     def to_icalendar_event(self):
         event = super().to_icalendar_event()
         event.add('wait-at-goal', self.request.wait_at_goal)
@@ -711,17 +697,6 @@ class DisinfectionTask(Task):
     capabilities = fields.ListField(default=["navigation", "uvc-radiation"])
 
     objects = TaskManager()
-
-    @classmethod
-    def from_request(cls, request, api=None):
-        start = TimepointConstraint(earliest_time=request.earliest_start_time.utc_time,
-                                    latest_time=request.latest_start_time.utc_time)
-        temporal = TemporalConstraints(start=start,
-                                       work_time=EstimatedDuration(),
-                                       travel_time=EstimatedDuration())
-        constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
-        return task
 
     def to_icalendar_event(self):
         event = super().to_icalendar_event()

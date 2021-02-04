@@ -2,13 +2,14 @@ import inspect
 import sys
 import uuid
 
+import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
 from fmlib.models.environment import Timepoint
 from fmlib.models.event import Event
 from fmlib.models.users import User
 from fmlib.utils.messages import Document
-from pymodm import fields, MongoModel
+from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import ValidationError
 from pymodm.manager import Manager
@@ -27,8 +28,7 @@ class RequestQuerySet(QuerySet):
             return request
         except ValidationError:
             print(f"Request {request.request_id} has a deprecated format")
-            if hasattr(request, "task_id") and not self.get_request_by_task(request.task_id):
-                request.deprecate()
+            request.deprecate()
             raise
 
     def get_request(self, request_id):
@@ -36,11 +36,6 @@ class RequestQuerySet(QuerySet):
             request_id = uuid.UUID(request_id)
         request = self.get({'_id': request_id})
         return self.validate_model(request)
-
-    def get_request_by_task(self, task_id):
-        if isinstance(task_id, str):
-            task_id = uuid.UUID(task_id)
-        request = self.raw({'task_id': task_id})
 
 
 RequestManager = Manager.from_queryset(RequestQuerySet)
@@ -61,10 +56,6 @@ class Request(MongoModel):
         return cls.objects.get_request(request_id)
 
     @classmethod
-    def get_request_by_task(cls, task_id):
-        request = cls.objects.get_request_by_task(task_id)
-
-    @classmethod
     def get_all_requests(cls):
         requests = cls.objects.all()
         valid_requests = list()
@@ -82,16 +73,38 @@ class Request(MongoModel):
         with switch_collection(cls, cls.Meta.archive_collection):
             return cls.get_all_requests()
 
+class RepetitionPattern(EmbeddedMongoModel):
+    until = fields.DateTimeField()
+    count = fields.IntegerField()
+    open_end = fields.BooleanField()
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
+        if dict_repr.get("until"):
+            dict_repr["until"] = self.until.isoformat()
+        return dict_repr
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = Document.from_payload(payload)
+        if document.get("until"):
+            until = dateutil.parser.parse(document.pop("until"))
+            until = until.replace(microsecond=0)
+            document['until'] = until
+        repetition_pattern = cls.from_document(document)
+        return repetition_pattern
+
 
 class TaskRequest(Request):
     request_id = fields.UUIDField(primary_key=True)
-    task_id = fields.UUIDField(blank=True)
-    parent_task_id = fields.UUIDField(blank=True)  # Indicates that this request was originated from an uncompleted task
+    task_ids = fields.ListField()
     priority = fields.IntegerField(default=TaskPriority.NORMAL)
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     map = fields.CharField()
     valid = fields.BooleanField()
+    repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern, blank=True)
     event = fields.ReferenceField(Event, blank=True)
 
     objects = RequestManager()
@@ -112,8 +125,10 @@ class TaskRequest(Request):
     def task_type(self):
         return self.Meta.task_type
 
-    def update_task_id(self, task_id):
-        self.task_id = task_id
+    def update_task_ids(self, task_id):
+        if not self.task_ids:
+            self.task_ids = list()
+        self.task_ids.append(task_id)
         self.save()
 
     def mark_as_invalid(self):
@@ -132,11 +147,24 @@ class TaskRequest(Request):
         request.save()
         return request
 
+    def repeat(self, estimated_finish_time):
+        if self.repetition_pattern.until and estimated_finish_time < self.repetition_pattern.until:
+                return True
+        if self.repetition_pattern.count and len(self.task_ids) < self.repetition_pattern.count:
+            return True
+        if self.repetition_pattern.open_end:
+            return True
+
+        return False
+
     @classmethod
     def to_document(cls, payload):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('request_id')
         event = document.get("event")
+        repetition_pattern = document.get("repetition_pattern")
+        if isinstance(repetition_pattern, dict):
+            document['repetition_pattern'] = RepetitionPattern.from_payload(repetition_pattern)
         if isinstance(event, dict):
             event.update(task_type=cls.Meta.task_type)
             document["event"] = Event.from_payload(event)
@@ -194,6 +222,8 @@ class TaskRequest(Request):
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr["request_id"] = str(dict_repr.pop('_id'))
+        if self.repetition_pattern:
+            dict_repr["repetition_pattern"] = self.repetition_pattern.to_dict()
         if self.event:
             dict_repr["event"] = self.event.to_dict()
         return dict_repr
@@ -213,7 +243,7 @@ class TaskRequest(Request):
                     field.validate(field_value)
             except Exception as exc:
                 if field.attname == "request_id":
-                    self.request_id = self.task_id
+                    self.request_id = uuid.uuid4()
                 else:
                     delattr(self, field.attname)
         self.archive()
@@ -227,7 +257,7 @@ class TaskRequest(Request):
                 return request_cls
 
     def get_common_attrs(self):
-        ignore_attrs = ["task_id", "parent_task_id", "request_id"]
+        ignore_attrs = ["task_ids", "request_id"]
         kwargs = dict()
         for attr in self.__dict__['_data'].__dict__['_members']:
             if attr not in ignore_attrs:
