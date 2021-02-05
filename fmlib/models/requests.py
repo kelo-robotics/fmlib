@@ -590,6 +590,7 @@ class InvalidRequestTime(InvalidRequest):
 
 
 class TaskRequestUpdate(TaskRequest):
+    task_id = fields.UUIDField()
     update_all = fields.BooleanField(default=False)
 
     class Meta:
