@@ -637,9 +637,9 @@ class Task(MongoModel):
         return tasks, archived_tasks
 
     def get_parent_tasks(self, tasks=list()):
-        if self.request.parent_task_id:
+        if self.parent_task_id:
             try:
-                task = Task.get_archived_task(self.request.parent_task_id)
+                task = Task.get_archived_task(self.parent_task_id)
                 tasks.append(task)
                 task.get_parent_tasks(tasks)
             except DoesNotExist:
