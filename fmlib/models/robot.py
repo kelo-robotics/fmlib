@@ -3,6 +3,7 @@ import logging
 from fmlib.models.environment import Position
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
+from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
@@ -92,8 +93,18 @@ class Version(EmbeddedMongoModel):
 
 class RobotQuerySet(QuerySet):
 
+    def validate_model(self, robot):
+        try:
+            robot.full_clean()
+            return robot
+        except ValidationError:
+            print(f"Robot {robot.robot_id} has a deprecated format")
+            robot.deprecate()
+            raise
+
     def get_robot(self, robot_id):
-        return self.get({'_id': robot_id})
+        robot = self.get({'_id': robot_id})
+        return self.validate_model(robot)
 
 
 RobotManager = Manager.from_queryset(RobotQuerySet)
@@ -124,6 +135,23 @@ class Robot(MongoModel):
         with switch_collection(self, self.Meta.archive_collection):
             super().save()
         self.delete()
+
+    def deprecate(self):
+        """The robot has a deprecated format. Remove the robot from the "robot" collection and store it in the
+        robot_archive collection. Only the fields that remain valid are stored in the archive_collection."""
+
+        for field in self._mongometa.get_fields():
+            try:
+                field_value = field.value_from_object(self)
+                field_empty = field.is_undefined(self)
+                if field_empty and field.required:
+                    setattr(self, field.attname, None)
+                elif not field_empty:
+                    field.validate(field_value)
+            except Exception as exc:
+                delattr(self, field.attname)
+
+        self.archive()
 
     @classmethod
     def get_robot(cls, robot_id):
