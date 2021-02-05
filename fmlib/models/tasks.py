@@ -490,14 +490,13 @@ class Task(MongoModel):
     def to_request(self, **kwargs):
         request_type = kwargs.pop("request_type")
         request_cls = getattr(requests, request_type)
-        ignore_attrs = ["task_id", "event", "_id"]
+        ignore_attrs = ["task_ids", "event", "repetition_pattern", "_id"]
 
         kwargs = request_cls.parse_dict(**kwargs)
 
         for attr in self.request.__dict__['_data'].__dict__['_members']:
             if attr not in kwargs and attr not in ignore_attrs:
                 kwargs[attr] = getattr(self.request, attr)
-        kwargs.update(parent_task_id=self.task_id)
 
         request = request_cls.create_new(**kwargs)
         return request
