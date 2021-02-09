@@ -56,6 +56,12 @@ class Request(MongoModel):
         return cls.objects.get_request(request_id)
 
     @classmethod
+    def get_archived_request(cls, request_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.get_request(request_id)
+
+
+    @classmethod
     def get_all_requests(cls):
         requests = cls.objects.all()
         valid_requests = list()
@@ -116,9 +122,15 @@ class TaskRequest(Request):
         codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
         task_type = "Task"
 
+    def save(self):
+        try:
+            super().save(cascade=True)
+        except ServerSelectionTimeoutError:
+            logging.warning('Could not save models to MongoDB')
+
     def archive(self):
         with switch_collection(self, TaskRequest.Meta.archive_collection):
-            super().save()
+            self.save()
         self.delete()
 
     @property
