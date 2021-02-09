@@ -625,7 +625,7 @@ class Task(MongoModel):
     def to_request(self, **kwargs):
         request_type = kwargs.pop("request_type")
         request_cls = getattr(requests, request_type)
-        ignore_attrs = ["task_ids", "event", "repetition_pattern", "_id"]
+        ignore_attrs = ["task_ids", "event", "repetition_pattern", "request_id"]
 
         kwargs = request_cls.parse_dict(**kwargs)
 
