@@ -1,5 +1,7 @@
 import uuid
 
+import pytz
+from bson.codec_options import CodecOptions
 from fmlib.models.environment import Position
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
@@ -248,6 +250,7 @@ class ActionProgress(MongoModel, EmbeddedMongoModel):
     class Meta:
         archive_collection = 'action_progress_archive'
         ignore_unknown_fields = True
+        codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
 
     def archive(self):
         try:
