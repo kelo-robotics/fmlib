@@ -262,6 +262,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
     class Meta:
         archive_collection = 'task_status_archive'
         ignore_unknown_fields = True
+        codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
 
     @classmethod
     def create_new(cls, **kwargs):
@@ -436,7 +437,7 @@ class Task(MongoModel):
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
         constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request.request_id, constraints=constraints, api=api)
         return task
 
     @property
@@ -725,7 +726,10 @@ class Task(MongoModel):
     def get_tasks_by_request(cls, request_id):
         tasks = list()
         archived_tasks = list()
-        request = requests.TaskRequest.get_request(request_id)
+        try:
+            request = requests.TaskRequest.get_request(request_id)
+        except DoesNotExist:
+            request = requests.TaskRequest.get_archived_request(request_id)
         for task_id in request.task_ids:
             try:
                 tasks.append(cls.get_task(task_id))
@@ -748,7 +752,7 @@ class Task(MongoModel):
 
 
 class TransportationTask(Task):
-    request = fields.EmbeddedDocumentField(requests.TransportationRequest)
+    request = fields.ReferenceField(requests.TransportationRequest)
     capabilities = fields.ListField(default=["navigation", "docking"])
 
     objects = TaskManager()
@@ -761,7 +765,7 @@ class TransportationTask(Task):
 
 
 class NavigationTask(Task):
-    request = fields.EmbeddedDocumentField(requests.NavigationRequest)
+    request = fields.ReferenceField(requests.NavigationRequest)
     capabilities = fields.ListField(default=["navigation"])
 
     objects = TaskManager()
@@ -776,7 +780,7 @@ class DefaultNavigationTask(NavigationTask):
 
 
 class GuidanceTask(Task):
-    request = fields.EmbeddedDocumentField(requests.GuidanceRequest)
+    request = fields.ReferenceField(requests.GuidanceRequest)
     capabilities = fields.ListField(default=["navigation", "guidance"])
 
     objects = TaskManager()
@@ -788,7 +792,7 @@ class GuidanceTask(Task):
 
 
 class DisinfectionTask(Task):
-    request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
+    request = fields.ReferenceField(requests.DisinfectionRequest)
     capabilities = fields.ListField(default=["navigation", "uvc-radiation"])
 
     objects = TaskManager()
