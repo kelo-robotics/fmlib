@@ -1,28 +1,14 @@
 import logging
 
-from fmlib.models.environment import Position
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
-from ropod.structs.status import AvailabilityStatus, ComponentStatus as ComponentStatusConst
+from ropod.structs.status import AvailabilityStatus
 
-
-class ComponentStatus(EmbeddedMongoModel):
-    status = fields.IntegerField(default=ComponentStatusConst.OPTIMAL)
-    issues = fields.DictField(blank=True)
-
-    class Meta:
-        cascade = True
-
-    def update_status(self, health_status, issues=None):
-        if issues is None:
-            issues = dict()
-
-        self.status = health_status
-        self.issues = issues
+from fmlib.models.environment import Position
 
 
 class Availability(EmbeddedMongoModel):
@@ -41,7 +27,7 @@ class Availability(EmbeddedMongoModel):
 class RobotStatus(EmbeddedMongoModel):
 
     availability = fields.EmbeddedDocumentField(Availability)
-    component = fields.EmbeddedDocumentField(ComponentStatus)
+    battery = fields.FloatField()
 
 
 class HardwareComponent(EmbeddedMongoModel):
@@ -113,7 +99,6 @@ RobotManager = Manager.from_queryset(RobotQuerySet)
 class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
-    uuid = fields.UUIDField()
     version = fields.EmbeddedDocumentField(Version)
     status = fields.EmbeddedDocumentField(RobotStatus)
     position = fields.EmbeddedDocumentField(Position)
@@ -166,18 +151,23 @@ class Robot(MongoModel):
         robots = cls.get_robots()
         return [robot for robot in robots if robot.status.availability.status == availability_status]
 
+    def update_version(self, software, hardware):
+        self.version.software = software
+        self.version.hardware = hardware
+        self.save()
+
     def update_position(self, **kwargs):
         save_in_db = kwargs.pop("save_in_db", True)
         self.position.update_position(**kwargs)
         if save_in_db:
             self.save()
 
-    def update_component_status(self, health_status, issues=None):
-        self.status.component.update_status(health_status, issues)
-        self.save()
-
     def update_availability(self, availability_status, current_task=None):
         self.status.availability.update_status(availability_status, current_task)
+        self.save()
+
+    def update_battery(self, battery):
+        self.status.battery = battery
         self.save()
 
     def is_capable(self, task):
@@ -198,6 +188,8 @@ class Robot(MongoModel):
             kwargs.update(position=Position())
 
         robot = cls(robot_id, **kwargs)
+        robot.status = RobotStatus(availability=Availability())
+
         if save_in_db:
             robot.save()
         return robot
