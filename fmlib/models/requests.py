@@ -1,21 +1,24 @@
 import inspect
+import logging
 import sys
 import uuid
 
 import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
-from fmlib.models.environment import Timepoint
-from fmlib.models.event import Event
-from fmlib.models.users import User
-from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
+from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
 from ropod.utils.timestamp import TimeStamp
+
+from fmlib.models.environment import Timepoint
+from fmlib.models.event import Event
+from fmlib.models.users import User
+from fmlib.utils.messages import Document
 
 this_module = sys.modules[__name__]
 
@@ -161,7 +164,7 @@ class TaskRequest(Request):
 
     def repeat(self, estimated_finish_time):
         if self.repetition_pattern.until and estimated_finish_time < self.repetition_pattern.until:
-                return True
+            return True
         if self.repetition_pattern.count and len(self.task_ids) < self.repetition_pattern.count:
             return True
         if self.repetition_pattern.open_end:
