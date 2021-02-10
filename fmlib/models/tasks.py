@@ -320,7 +320,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
     parent_task_id = fields.UUIDField(blank=True)
-    request = fields.ReferenceField(requests.TaskRequest)
+    request = fields.EmbeddedDocumentField(requests.TaskRequest)
     status = fields.EmbeddedDocumentField(TaskStatus)
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
@@ -437,7 +437,7 @@ class Task(MongoModel):
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
         constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request.request_id, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, api=api)
         return task
 
     @property
@@ -752,7 +752,7 @@ class Task(MongoModel):
 
 
 class TransportationTask(Task):
-    request = fields.ReferenceField(requests.TransportationRequest)
+    request = fields.EmbeddedDocumentField(requests.TransportationRequest)
     capabilities = fields.ListField(default=["navigation", "docking"])
 
     objects = TaskManager()
@@ -765,7 +765,7 @@ class TransportationTask(Task):
 
 
 class NavigationTask(Task):
-    request = fields.ReferenceField(requests.NavigationRequest)
+    request = fields.EmbeddedDocumentField(requests.NavigationRequest)
     capabilities = fields.ListField(default=["navigation"])
 
     objects = TaskManager()
@@ -775,12 +775,13 @@ class NavigationTask(Task):
         event.add('wait-at-goal', self.request.wait_at_goal)
         return event
 
+
 class DefaultNavigationTask(NavigationTask):
     objects = TaskManager()
 
 
 class GuidanceTask(Task):
-    request = fields.ReferenceField(requests.GuidanceRequest)
+    request = fields.EmbeddedDocumentField(requests.GuidanceRequest)
     capabilities = fields.ListField(default=["navigation", "guidance"])
 
     objects = TaskManager()
@@ -792,7 +793,7 @@ class GuidanceTask(Task):
 
 
 class DisinfectionTask(Task):
-    request = fields.ReferenceField(requests.DisinfectionRequest)
+    request = fields.EmbeddedDocumentField(requests.DisinfectionRequest)
     capabilities = fields.ListField(default=["navigation", "uvc-radiation"])
 
     objects = TaskManager()
