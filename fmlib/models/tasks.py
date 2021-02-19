@@ -9,6 +9,7 @@ import pytz
 from bson.codec_options import CodecOptions
 from fmlib.models import requests
 from fmlib.models.actions import Action, ActionProgress, EstimatedDuration
+from fmlib.models.charging_station import ChargingStation
 from fmlib.models.environment import Position
 from fmlib.models.timetable import Timetable
 from fmlib.utils.messages import Document
@@ -81,7 +82,7 @@ class TaskStatusQuerySet(QuerySet):
         for t in task_status:
             try:
                 self.validate_model(t)
-            except ValueError:
+            except ValidationError:
                 invalid_task_status.append(t)
         return [t for t in task_status if t not in invalid_task_status]
 
@@ -396,6 +397,14 @@ class Task(MongoModel):
             timetable = Timetable.get_timetable(robot_id)
             return timetable.get_time(self.task_id, "finish")
 
+    @property
+    def start_location(self):
+        return self.request.start_location
+
+    @property
+    def finish_location(self):
+        return self.request.finish_location
+
     @classmethod
     def from_payload(cls, payload, save_in_db=True):
         document = Document.from_payload(payload)
@@ -428,16 +437,21 @@ class Task(MongoModel):
 
     @classmethod
     def from_request(cls, request, **kwargs):
-        earliest_time = kwargs.get("earliest_time", request.earliest_start_time.utc_time)
-        latest_time = kwargs.get("latest_time", request.latest_start_time.utc_time)
-        api = kwargs.get("api")
+        try:
+            earliest_time = kwargs.pop("earliest_time")
+        except KeyError:
+            earliest_time = request.earliest_start_time.utc_time
+        try:
+            latest_time = kwargs.pop("latest_time")
+        except KeyError:
+            latest_time= request.latest_start_time.utc_time
         start = TimepointConstraint(earliest_time=earliest_time,
                                     latest_time=latest_time)
         temporal = TemporalConstraints(start=start,
                                        work_time=EstimatedDuration(),
                                        travel_time=EstimatedDuration())
         constraints = TaskConstraints(temporal=temporal)
-        task = cls.create_new(request=request, constraints=constraints, api=api)
+        task = cls.create_new(request=request, constraints=constraints, **kwargs)
         return task
 
     @property
@@ -803,3 +817,18 @@ class DisinfectionTask(Task):
         event.add('area', self.request.area)
         return event
 
+
+class ChargingTask(Task):
+    request = fields.EmbeddedDocumentField(requests.ChargingRequest)
+    capabilities = fields.ListField(default=["navigation"])
+    charging_station = fields.ReferenceField(ChargingStation)
+
+    @property
+    def start_location(self):
+        return self.charging_station.position.name
+
+    @property
+    def finish_location(self):
+        return self.charging_station.position.name
+
+    objects = TaskManager()
