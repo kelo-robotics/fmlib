@@ -6,6 +6,11 @@ import uuid
 import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
+from fmlib.models.environment import Timepoint
+from fmlib.models.event import Event
+from fmlib.models.robot import Robot
+from fmlib.models.users import User
+from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import ValidationError
@@ -14,11 +19,6 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
 from ropod.utils.timestamp import TimeStamp
-
-from fmlib.models.environment import Timepoint
-from fmlib.models.event import Event
-from fmlib.models.users import User
-from fmlib.utils.messages import Document
 
 this_module = sys.modules[__name__]
 
@@ -63,7 +63,6 @@ class Request(MongoModel):
         with switch_collection(cls, cls.Meta.archive_collection):
             return cls.get_request(request_id)
 
-
     @classmethod
     def get_all_requests(cls):
         requests = cls.objects.all()
@@ -81,6 +80,7 @@ class Request(MongoModel):
     def get_all_archived_requests(cls):
         with switch_collection(cls, cls.Meta.archive_collection):
             return cls.get_all_requests()
+
 
 class RepetitionPattern(EmbeddedMongoModel):
     until = fields.DateTimeField()
@@ -307,8 +307,7 @@ class TransportationRequest(TaskRequest):
         request.save()
         return request
 
-    @classmethod
-    def from_recurring_event(cls, event, user_id=None):
+    def from_recurring_event(self, event, user_id=None):
         request_type = self.__class__.__name__
         request_cls = getattr(this_module, request_type)
         kwargs = super().get_common_attrs()
@@ -318,17 +317,18 @@ class TransportationRequest(TaskRequest):
         latest_pickup_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_pickup_time.postpone(event.start_delta)
 
-        kwargs = {"event": event.uid,
-                  "pickup_location":event.pickup_location,
-                  "delivery_location":event.delivery_location,
-                  "earliest_pickup_time":earliest_pickup_time,
-                  "latest_pickup_time": latest_pickup_time,
-                  "load_type": event.load_type,
-                  "load_id": event.load_id}
+        kwargs.update({"event": event.uid,
+                       "pickup_location":event.pickup_location,
+                       "delivery_location":event.delivery_location,
+                       "earliest_pickup_time":earliest_pickup_time,
+                       "latest_pickup_time": latest_pickup_time,
+                       "load_type": event.load_type,
+                       "load_id": event.load_id})
         if user_id:
             kwargs.update(user_id=user_id)
 
-        return cls.create_new(**kwargs)
+        request = request_cls.create_new(**kwargs)
+        return request
 
     @property
     def start_location(self):
@@ -372,10 +372,16 @@ class TransportationRequest(TaskRequest):
     @staticmethod
     def map_args(**kwargs):
         map_keys = {'start_location': 'pickup_location',
+                    'finish_location': 'delivery_location',
                     'earliest_start_time': 'earliest_pickup_time',
                     'latest_start_time': 'latest_pickup_time'}
-        kwargs = {map_keys[key]: value for key, value in kwargs.items()}
-        return kwargs
+        updated_kwargs = dict()
+        for key, value in kwargs.items():
+            if key in map_keys:
+                updated_kwargs[map_keys[key]] = value
+            else:
+                updated_kwargs[key] = value
+        return updated_kwargs
 
     @classmethod
     def parse_dict(cls, **kwargs):
@@ -414,8 +420,7 @@ class NavigationRequest(TaskRequest):
         request.save()
         return request
 
-    @classmethod
-    def from_recurring_event(cls, map, event, user_id=None):
+    def from_recurring_event(self, event, user_id=None):
         request_type = self.__class__.__name__
         request_cls = getattr(this_module, request_type)
         kwargs = super().get_common_attrs()
@@ -425,16 +430,17 @@ class NavigationRequest(TaskRequest):
         latest_arrival_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
         latest_arrival_time.postpone(event.start_delta)
 
-        kwargs= {"event": event.uid,
-                 "start_location": event.start_location,
-                 "goal_location":event.goal_location,
-                 "earliest_arrival_time":earliest_arrival_time,
-                 "latest_arrival_time":latest_arrival_time,
-                 "wait_at_goal":event.wait_at_goal}
+        kwargs.update({"event": event.uid,
+                       "start_location": event.start_location,
+                       "goal_location": event.goal_location,
+                       "earliest_arrival_time": earliest_arrival_time,
+                       "latest_arrival_time": latest_arrival_time,
+                       "wait_at_goal": event.wait_at_goal})
         if user_id:
             kwargs.update(user_id=user_id)
 
-        return cls.create_new(**kwargs)
+        request = request_cls.create_new(**kwargs)
+        return request
 
     @property
     def finish_location(self):
@@ -464,11 +470,15 @@ class NavigationRequest(TaskRequest):
 
     @staticmethod
     def map_args(**kwargs):
-        map_keys = {'start_location': 'start_location',
-                    'earliest_start_time': 'earliest_arrival_time',
+        map_keys = {'earliest_start_time': 'earliest_arrival_time',
                     'latest_start_time': 'latest_arrival_time'}
-        kwargs = {map_keys[key]: value for key, value in kwargs.items()}
-        return kwargs
+        updated_kwargs = dict()
+        for key, value in kwargs.items():
+            if key in map_keys:
+                updated_kwargs[map_keys[key]] = value
+            else:
+                updated_kwargs[key] = value
+        return updated_kwargs
 
     @classmethod
     def parse_dict(cls, **kwargs):
@@ -480,15 +490,72 @@ class NavigationRequest(TaskRequest):
             kwargs["latest_arrival_time"] = Timepoint.from_payload(kwargs.pop("latest_arrival_time"))
         return kwargs
 
+
 class DefaultNavigationRequest(NavigationRequest):
-    """ Return to default waiting location
+    """ Send robot to its waiting location
     """
+    robot = fields.ReferenceField(Robot)
     objects = RequestManager()
 
     class Meta:
         task_type = "DefaultNavigationTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+
+
+class ChargingRequestQuerySet(RequestQuerySet):
+
+    def by_robot(self, robot_id):
+        requests = [r for r in self.raw({"robot": robot_id})]
+        invalid_requests = list()
+        for r in requests:
+            try:
+                self.validate_model(r)
+            except ValidationError:
+                invalid_requests.append(r)
+        return [r for r in requests if r not in invalid_requests]
+
+ChargingRequestManager = Manager.from_queryset(ChargingRequestQuerySet)
+
+class ChargingRequest(TaskRequest):
+    """ Send robot to a charging station and charge until the given charging percentage
+    """
+    robot = fields.ReferenceField(Robot)
+    charging_percentage = fields.FloatField(default=100)
+    earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
+    latest_start_time = fields.EmbeddedDocumentField(Timepoint)
+
+    objects = ChargingRequestManager()
+
+    class Meta:
+        task_type = "ChargingTask"
+        collection_name = TaskRequest.Meta.collection_name
+        archive_collection = TaskRequest.Meta.archive_collection
+
+    @property
+    def eligible_robots(self):
+        return [self.robot.robot_id]
+
+    @classmethod
+    def get_task_requests_by_robot(cls, robot_id):
+        return cls.objects.by_robot(robot_id)
+
+    @staticmethod
+    def map_args(**kwargs):
+        # Locations are taken from the charging station (filled it in the task)
+        try:
+            kwargs.pop("start_location")
+        except KeyError:
+            pass
+        try:
+            kwargs.pop("finish_location")
+        except KeyError:
+            pass
+        return kwargs
+
+    def validate_request(self, path_planner, complete_request=True):
+        if self.latest_start_time.utc_time < TimeStamp().to_datetime():
+            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
 
 
 class GuidanceRequest(NavigationRequest):
@@ -535,9 +602,9 @@ class DisinfectionRequest(TaskRequest):
         latest_start_time.postpone(event.start_delta)
 
         kwargs.update({"event": event.uid,
-                       "area":event.area,
-                       "earliest_start_time":earliest_start_time,
-                       "latest_start_time":latest_start_time})
+                       "area": event.area,
+                       "earliest_start_time": earliest_start_time,
+                       "latest_start_time": latest_start_time})
         if user_id:
             kwargs.update(user_id=user_id)
 
@@ -591,6 +658,8 @@ class DisinfectionRequest(TaskRequest):
 class InvalidRequest(Exception):
     pass
 
+class InvalidRequestMap(InvalidRequest):
+    pass
 
 class InvalidRequestLocation(InvalidRequest):
     pass
@@ -631,7 +700,8 @@ class NavigationRequestUpdate(NavigationRequest, TaskRequestUpdate):
         ignore_unknown_fields = TaskRequestUpdate.Meta.ignore_unknown_fields
         task_type = NavigationRequest.Meta.task_type
 
-class DefaultNavigationREquestUpdate(NavigationRequestUpdate):
+
+class DefaultNavigationRequestUpdate(NavigationRequestUpdate):
 
     class Meta:
         collection_name = TaskRequestUpdate.Meta.collection_name
