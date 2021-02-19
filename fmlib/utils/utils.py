@@ -57,9 +57,12 @@ def load_json(json_file):
 
 
 def load_yaml_config_file(file_name):
-    with open(file_name, 'r') as file_handle:
-        config = load_yaml(file_handle)
-    return config
+    try:
+        with open(file_name, 'r') as file_handle:
+            config = load_yaml(file_handle)
+        return config
+    except FileNotFoundError as error:
+        raise
 
 
 task_status_names = {value: name for name, value in vars(TaskStatus).items() if name.isupper()}
