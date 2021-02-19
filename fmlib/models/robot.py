@@ -28,6 +28,7 @@ class RobotStatus(EmbeddedMongoModel):
 
     availability = fields.EmbeddedDocumentField(Availability)
     battery = fields.FloatField()
+    requires_charging = fields.BooleanField(default=False)
 
 
 class HardwareComponent(EmbeddedMongoModel):
@@ -100,9 +101,11 @@ class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
     version = fields.EmbeddedDocumentField(Version)
+    simulator = fields.CharField()
     status = fields.EmbeddedDocumentField(RobotStatus)
     position = fields.EmbeddedDocumentField(Position)
     capabilities = fields.ListField(default=["navigation"])
+    min_battery_level = fields.FloatField()
 
     objects = RobotManager()
 
@@ -137,6 +140,15 @@ class Robot(MongoModel):
                 delattr(self, field.attname)
 
         self.archive()
+
+    @property
+    def requires_charging(self):
+        return self.status.requires_charging
+
+    @requires_charging.setter
+    def requires_charging(self, boolean):
+        self.status.requires_charging = boolean
+        self.save()
 
     @classmethod
     def get_robot(cls, robot_id):
