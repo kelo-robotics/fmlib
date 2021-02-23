@@ -3,6 +3,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 import dateutil.parser
 import pytz
@@ -405,6 +406,10 @@ class Task(MongoModel):
     def finish_location(self):
         return self.request.finish_location
 
+    @property
+    def priority(self):
+        return self.request.priority
+
     @classmethod
     def from_payload(cls, payload, save_in_db=True):
         document = Document.from_payload(payload)
@@ -691,13 +696,18 @@ class Task(MongoModel):
             return cls.get_task(task_id)
 
     @classmethod
-    def get_tasks_by_status(cls, status):
-        tasks = list()
-        if status in TaskStatus.archived_status:
+    def get_tasks_by_status(cls, status: List[str]) -> List['Task']:
+        tasks_by_status = list()
+        tasks = [task for task in cls.get_all_tasks()]
+
+        if any(item in status for item in TaskStatus.archived_status):
             with switch_collection(cls, cls.Meta.archive_collection):
-                tasks = [task for task in cls.get_all_tasks()]
-        else:
-            tasks = [task for task in cls.get_all_tasks()]
+                tasks.extend([task for task in cls.get_all_tasks()])
+
+        for task in tasks:
+            if task.status.status in status:
+                tasks_by_status.append(task)
+
         return tasks
 
     @classmethod
@@ -722,14 +732,20 @@ class Task(MongoModel):
         return tasks
 
     @classmethod
-    def get_tasks(cls, robot_id=None, status=None, recurrent=False):
+    def get_tasks(cls,
+                  robot_ids:Optional[List[str]]=None,
+                  status:Optional[List[str]]=None,
+                  recurrent:Optional[bool]=False) -> List['Task']:
         if status:
             tasks = cls.get_tasks_by_status(status)
         else:
             tasks = cls.get_all_tasks()
 
-        if robot_id:
-            tasks = [task for task in tasks if robot_id in task.assigned_robots]
+        if robot_ids:
+            tasks_by_robot = list()
+            for robot_id in robot_ids:
+                tasks_by_robot.extend([task for task in tasks if robot_id in task.assigned_robots])
+            tasks = tasks_by_robot
 
         if recurrent:
             tasks = [task for task in tasks if task.is_recurrent()]
