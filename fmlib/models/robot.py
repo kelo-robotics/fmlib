@@ -13,7 +13,7 @@ from fmlib.models.environment import Position
 
 class Availability(EmbeddedMongoModel):
 
-    status = fields.IntegerField(default=AvailabilityStatus.NO_COMMUNICATION, blank=True)
+    status = fields.IntegerField(default=AvailabilityStatus.NO_COMMUNICATION)
     current_task = fields.UUIDField(default=None, blank=True)
 
     class Meta:
