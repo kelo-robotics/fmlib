@@ -524,6 +524,7 @@ class ChargingRequest(TaskRequest):
     charging_percentage = fields.FloatField(default=100)
     earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
+    priority = fields.IntegerField(default=TaskPriority.HIGH)
 
     objects = ChargingRequestManager()
 
@@ -532,9 +533,6 @@ class ChargingRequest(TaskRequest):
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
 
-    @property
-    def eligible_robots(self):
-        return [self.robot.robot_id]
 
     @classmethod
     def get_task_requests_by_robot(cls, robot_id):
@@ -556,6 +554,21 @@ class ChargingRequest(TaskRequest):
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = super().to_document(payload)
+        document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
+        document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
+        request = cls.from_document(document)
+        request.save()
+        return request
+
+    def to_dict(self):
+        dict_repr = super().to_dict()
+        dict_repr["earliest_start_time"] = self.earliest_start_time.to_dict()
+        dict_repr["latest_start_time"] = self.latest_start_time.to_dict()
+        return dict_repr
 
 
 class GuidanceRequest(NavigationRequest):
