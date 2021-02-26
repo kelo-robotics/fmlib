@@ -51,6 +51,14 @@ class MongoStoreInterface:
         self.logger = logging.getLogger(__name__)
         self._store = mongo_store
 
+    @property
+    def db_name(self):
+        return self._store.db_name
+
+    @property
+    def port(self):
+        return  self._store.port
+
     def save(self, model):
         if self._store.connected:
             try:
