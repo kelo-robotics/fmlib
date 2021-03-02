@@ -6,6 +6,7 @@ import uuid
 import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
+from fmlib.models.environment import Position
 from fmlib.models.environment import Timepoint
 from fmlib.models.event import Event
 from fmlib.models.robot import Robot
@@ -398,6 +399,7 @@ class NavigationRequest(TaskRequest):
 
     start_location = fields.CharField()
     start_location_level = fields.IntegerField()
+    waypoints = fields.EmbeddedDocumentListField(Position)
     goal_location = fields.CharField()
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
