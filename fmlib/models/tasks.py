@@ -183,6 +183,19 @@ class TaskProgress(EmbeddedMongoModel):
     class Meta:
         ignore_unknown_fields = True
 
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        if "current_action" in dict_repr:
+            dict_repr['current_action'] = str(self.current_action)
+        if "current_pose" in dict_repr:
+            dict_repr['current_pose'] = self.current_pose.to_dict()
+        if "actions" in dict_repr:
+            parsed_actions = list()
+            for a in self.actions:
+                a.to_dict()
+                parsed_actions.append(a)
+            dict_repr['actions'] = parsed_actions
+
     def update(self, action_id, action_status, robot_pose, **kwargs):
         self.current_pose = robot_pose
         self.update_action_progress(action_id, action_status, **kwargs)
@@ -316,6 +329,8 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
         dict_repr = self.to_son().to_dict()
         dict_repr.pop('_cls')
         dict_repr['task_id'] = str(dict_repr.pop('_id'))
+        if "progress" in dict_repr:
+            dict_repr['progress'] = self.progress.to_dict()
         return dict_repr
 
 
@@ -363,7 +378,6 @@ class Task(MongoModel):
                                         latest_time=TimeStamp(delta=timedelta(minutes=1)).to_datetime())
             temporal = TemporalConstraints(start=start, work_time=EstimatedDuration(), travel_time=EstimatedDuration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
-        kwargs.update(scheduled_time=TimepointConstraint())
         status = TaskStatus.create_new(task_id=kwargs['task_id'])
         kwargs.update(status=status)
         task = cls(**kwargs)
@@ -426,13 +440,18 @@ class Task(MongoModel):
         dict_repr["task_id"] = str(dict_repr.pop('_id'))
         if "constraints" in dict_repr:
             dict_repr["constraints"] = self.constraints.to_dict()
+        if "scheduled_time" in dict_repr:
+            dict_repr["scheduled_time"] = self.scheduled_time.to_dict()
         if 'request' in dict_repr:
             dict_repr["request"] = self.request.to_dict()
         if "plan" in dict_repr:
-            for plan in dict_repr["plan"]:
-                for action in plan["actions"]:
-                    action.pop("estimated_duration")
-                    action.pop("_cls")
+            for i, plan in enumerate(self.plan):
+                parsed_actions = list()
+                for action in plan.actions:
+                    a = action.to_dict()
+                    a.pop("estimated_duration")
+                    parsed_actions.append(a)
+                dict_repr["plan"][i]["actions"] = parsed_actions
         dict_repr["status"] = self.status.to_dict()
         return dict_repr
 
@@ -610,7 +629,7 @@ class Task(MongoModel):
         self.save()
 
     def schedule(self, earliest_time, latest_time, api=None):
-        self.scheduled_time.update(earliest_time, latest_time)
+        self.scheduled_time = TimepointConstraint(earliest_time=earliest_time, latest_time=latest_time)
         self.update_status(TaskStatusConst.SCHEDULED, api)
         self.save()
 

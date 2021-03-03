@@ -94,6 +94,12 @@ class Action(MongoModel, EmbeddedMongoModel):
             super().save()
         self.delete()
 
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
+        dict_repr['_id'] = str(dict_repr.pop('_id'))
+        return dict_repr
+
     def update_duration(self, mean, variance, save_in_db=True):
         if not self.estimated_duration:
             self.estimated_duration = EstimatedDuration()
@@ -267,3 +273,13 @@ class ActionProgress(MongoModel, EmbeddedMongoModel):
         with switch_collection(ActionProgress, ActionProgress.Meta.archive_collection):
             super().save()
         self.delete()
+
+    def to_dict(self):
+        dict_repr = self.to_son().to_dict()
+        dict_repr.pop('_cls')
+        dict_repr['action_id'] = str(dict_repr.pop('_id'))
+        if self.start_time:
+            dict_repr['start_time'] = self.start_time.isoformat()
+        if self.finish_time:
+            dict_repr['finish_time'] = self.finish_time.isoformat()
+        return dict_repr
