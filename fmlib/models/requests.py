@@ -179,9 +179,9 @@ class TaskRequest(Request):
         document['_id'] = document.pop('request_id')
         event = document.get("event")
         repetition_pattern = document.get("repetition_pattern")
-        if isinstance(repetition_pattern, dict):
+        if repetition_pattern:
             document['repetition_pattern'] = RepetitionPattern.from_payload(repetition_pattern)
-        if isinstance(event, dict):
+        if event:
             event.update(task_type=cls.Meta.task_type)
             document["event"] = Event.from_payload(event)
         return document
@@ -242,6 +242,11 @@ class TaskRequest(Request):
             dict_repr["repetition_pattern"] = self.repetition_pattern.to_dict()
         if self.event:
             dict_repr["event"] = self.event.to_dict()
+        if self.task_ids:
+            parsed_task_ids = list()
+            for task_id in self.task_ids:
+                parsed_task_ids.append(str(task_id))
+            dict_repr["task_ids"] = parsed_task_ids
         return dict_repr
 
     def deprecate(self):
