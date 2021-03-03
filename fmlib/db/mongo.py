@@ -30,7 +30,7 @@ class MongoStore:
             # Default timeout is 30s
             connect(connection_str, alias=self.alias, serverSelectionTimeoutMS=self._connection_timeout)
             self._connected = True
-            self.logger.info("Connected to %s on port %s", self.db_name, self.port)
+            self.logger.info("Connecting to %s on port %s", self.db_name, self.port)
         except ServerSelectionTimeoutError as err:
             self.logger.critical("Cannot connect to MongoDB", exc_info=True)
             self._connected = False
@@ -77,6 +77,15 @@ class MongoStoreInterface:
         if self._store.connected:
             try:
                 model.update(**kwargs)
+            except ServerSelectionTimeoutError as err:
+                self.logger.error(err)
+
+    def insert(self, collection, file_data):
+        if self._store.connected:
+            try:
+                print(connection._get_db(alias=self._store.alias).client)
+                db = connection._get_db(alias=self._store.alias).client[self._store.db_name]
+                db[collection].insert(file_data)
             except ServerSelectionTimeoutError as err:
                 self.logger.error(err)
 
