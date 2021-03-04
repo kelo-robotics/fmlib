@@ -29,8 +29,10 @@ class RequestQuerySet(QuerySet):
     def validate_model(self, request):
         try:
             request.full_clean()
+            print(f"Request {request.request_id} is valid")
             return request
-        except ValidationError:
+        # except (ValueError, ValidationError):
+        except ValueError:
             print(f"Request {request.request_id} has a deprecated format")
             request.deprecate()
             raise
@@ -69,12 +71,15 @@ class Request(MongoModel):
         requests = cls.objects.all()
         valid_requests = list()
         deprecated_requests = list()
-        for request in requests:
-            try:
-                cls.objects.validate_model(request)
-                valid_requests.append(request)
-            except ValidationError:
-                deprecated_requests.append(request)
+        try:
+            for request in requests:
+                try:
+                    cls.objects.validate_model(request)
+                    valid_requests.append(request)
+                except ValidationError:
+                    deprecated_requests.append(request)
+        except ValueError:
+            pass
         return valid_requests
 
     @classmethod
