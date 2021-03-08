@@ -387,6 +387,9 @@ class Task(MongoModel):
     def is_recurrent(self):
         return self.request.is_recurrent()
 
+    def is_repetitive(self):
+        return self.request.is_repetitive()
+
     @property
     def task_type(self):
         return self.request.Meta.task_type

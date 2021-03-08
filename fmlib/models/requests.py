@@ -222,6 +222,11 @@ class TaskRequest(Request):
             return True
         return False
 
+    def is_repetitive(self):
+        if self.repetition_pattern:
+            return True
+        return False
+
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
