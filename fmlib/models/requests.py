@@ -29,10 +29,8 @@ class RequestQuerySet(QuerySet):
     def validate_model(self, request):
         try:
             request.full_clean()
-            print(f"Request {request.request_id} is valid")
             return request
-        # except (ValueError, ValidationError):
-        except ValueError:
+        except ValidationError:
             print(f"Request {request.request_id} has a deprecated format")
             request.deprecate()
             raise
@@ -67,19 +65,41 @@ class Request(MongoModel):
             return cls.get_request(request_id)
 
     @classmethod
+    def get_unregognized_field(cls, document):
+        try:
+            request = cls.from_document(document)
+            return None
+        except ValueError as e:
+            if "Unrecognized field name" in str(e):
+                unrecognized_field = str(e).split("'")[-2]
+                print("unrecognized field: ", unrecognized_field)
+                return unrecognized_field
+
+    @classmethod
     def get_all_requests(cls):
-        requests = cls.objects.all()
+        # Get requests as dict instances instead of as Model instances
+        requests = cls.objects.all().values()
         valid_requests = list()
         deprecated_requests = list()
-        try:
-            for request in requests:
-                try:
-                    cls.objects.validate_model(request)
-                    valid_requests.append(request)
-                except ValidationError:
-                    deprecated_requests.append(request)
-        except ValueError:
-            pass
+        for r in requests:
+            deprecate = False
+            while cls.get_unregognized_field(r):
+                unrecognized_field = cls.get_unregognized_field(r)
+                r.pop(unrecognized_field)
+                deprecate = True
+
+            request = cls.from_document(r)
+
+            if deprecate:
+                request.deprecate()
+                deprecate = False
+
+            try:
+                cls.objects.validate_model(request)
+                valid_requests.append(request)
+            except ValidationError:
+                deprecated_requests.append(request)
+
         return valid_requests
 
     @classmethod
@@ -119,8 +139,8 @@ class TaskRequest(Request):
     eligible_robots = fields.ListField(blank=True)
     map = fields.CharField()
     valid = fields.BooleanField()
-    repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern, blank=True)
-    event = fields.ReferenceField(Event, blank=True)
+    repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern)
+    event = fields.ReferenceField(Event)
 
     objects = RequestManager()
 
@@ -182,13 +202,19 @@ class TaskRequest(Request):
     def to_document(cls, payload):
         document = Document.from_payload(payload)
         document['_id'] = document.pop('request_id')
-        event = document.get("event")
-        repetition_pattern = document.get("repetition_pattern")
-        if repetition_pattern:
-            document['repetition_pattern'] = RepetitionPattern.from_payload(repetition_pattern)
-        if event:
-            event.update(task_type=cls.Meta.task_type)
-            document["event"] = Event.from_payload(event)
+        try:
+            event = document.pop("event")
+            if event:
+                event.update(task_type=cls.Meta.task_type)
+                document["event"] = Event.from_payload(event)
+        except KeyError:
+            pass
+        try:
+            repetition_pattern = document.pop("repetition_pattern")
+            if repetition_pattern:
+                document['repetition_pattern'] = RepetitionPattern.from_payload(repetition_pattern)
+        except KeyError:
+            pass
         return document
 
     def is_recurrent(self):
@@ -409,7 +435,7 @@ class NavigationRequest(TaskRequest):
 
     start_location = fields.CharField()
     start_location_level = fields.IntegerField()
-    waypoints = fields.EmbeddedDocumentListField(Position)
+    waypoints = fields.EmbeddedDocumentListField(Position, blank=True)
     goal_location = fields.CharField()
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
