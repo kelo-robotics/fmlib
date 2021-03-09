@@ -190,8 +190,10 @@ class TaskRequest(Request):
         return request
 
     def repeat(self, estimated_finish_time):
-        if self.repetition_pattern.until and estimated_finish_time < self.repetition_pattern.until:
-            return True
+        if self.repetition_pattern.until:
+            current_time = TimeStamp().to_datetime()
+            if current_time < self.repetition_pattern.until and estimated_finish_time < self.repetition_pattern.until:
+                return True
         if self.repetition_pattern.count and len(self.task_ids) < self.repetition_pattern.count:
             return True
         if self.repetition_pattern.open_end:
