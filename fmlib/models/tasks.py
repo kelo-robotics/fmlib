@@ -257,6 +257,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
     task_id = fields.UUIDField(primary_key=True)
     status = fields.IntegerField(default=TaskStatusConst.UNALLOCATED)
     delayed = fields.BooleanField(default=False)
+    paused = fields.BooleanField(default=False)
     progress = fields.EmbeddedDocumentField(TaskProgress)
 
     objects = TaskStatusManager()
@@ -345,6 +346,7 @@ class Task(MongoModel):
     scheduled_time = fields.EmbeddedDocumentField(TimepointConstraint)
     eligible_robots = fields.ListField(blank=True)
     capable_robots = fields.ListField(blank=True)
+    timeout_time = fields.DateTimeField(blank=True)
 
     objects = TaskManager()
 
@@ -373,9 +375,9 @@ class Task(MongoModel):
             api = None
         if 'task_id' not in kwargs.keys():
             kwargs.update(task_id=uuid.uuid4())
-        elif 'constraints' not in kwargs.keys():
+        if 'constraints' not in kwargs.keys():
             start = TimepointConstraint(earliest_time=TimeStamp().to_datetime(),
-                                        latest_time=TimeStamp(delta=timedelta(minutes=1)).to_datetime())
+                                        latest_time=TimeStamp(delta=timedelta(minutes=10)).to_datetime())
             temporal = TemporalConstraints(start=start, work_time=EstimatedDuration(), travel_time=EstimatedDuration())
             kwargs.update(constraints=TaskConstraints(temporal=temporal))
         status = TaskStatus.create_new(task_id=kwargs['task_id'])
@@ -623,6 +625,18 @@ class Task(MongoModel):
         self.plan[0].robot = None
         self.save()
         self.update_status(TaskStatusConst.UNALLOCATED, api)
+
+    def pause(self, api=None):
+        self.status.paused = True
+        self.save()
+        if api:
+            self.publish_task_update(api)
+
+    def continue_(self, api=None):
+        self.status.paused = False
+        self.save()
+        if api:
+            self.publish_task_update(api)
 
     def update_plan(self, task_plan, api=None):
         # Adds the section of the plan that is independent from the robot,
