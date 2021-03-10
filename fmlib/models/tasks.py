@@ -771,7 +771,8 @@ class Task(MongoModel):
     def get_tasks(cls,
                   robot_ids:Optional[List[str]]=None,
                   status:Optional[List[str]]=None,
-                  recurrent:Optional[bool]=False) -> List['Task']:
+                  recurrent:Optional[bool]=False,
+                  repetitive:Optional[bool]=False) -> List['Task']:
         if status:
             tasks = cls.get_tasks_by_status(status)
         else:
@@ -785,6 +786,9 @@ class Task(MongoModel):
 
         if recurrent:
             tasks = [task for task in tasks if task.is_recurrent()]
+
+        if repetitive:
+            tasks = [task for task in tasks if task.is_repetitive()]
 
         return tasks
 
