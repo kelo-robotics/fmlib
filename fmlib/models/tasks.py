@@ -252,12 +252,12 @@ class TaskProgress(EmbeddedMongoModel):
         for action in task_plan[0].actions:
             self.actions.append(ActionProgress(action.action_id))
 
-
 class TaskStatus(MongoModel, EmbeddedMongoModel):
     task_id = fields.UUIDField(primary_key=True)
     status = fields.IntegerField(default=TaskStatusConst.UNALLOCATED)
     delayed = fields.BooleanField(default=False)
     paused = fields.BooleanField(default=False)
+    recovery_method = fields.IntegerField(blank=True)
     progress = fields.EmbeddedDocumentField(TaskProgress)
 
     objects = TaskStatusManager()
@@ -325,6 +325,11 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
             self.save()
         self.progress.update(action_id, action_status, robot_pose, **kwargs)
         self.save(cascade=True)
+
+    def get_current_pose(self):
+        if not self.progress:
+            return None
+        return self.progress.current_pose
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
@@ -609,6 +614,24 @@ class Task(MongoModel):
         if api:
             time.sleep(0.5)
             self.publish_task_update(api)
+
+    def set_recovery_method(self, method, api=None):
+        if not self.status:
+            self.status = TaskStatus(task_id=self.task_id)
+        self.status.recovery_method = method
+        self.save()
+        if api:
+            time.sleep(0.5)
+            self.publish_task_update(api)
+
+    def clear_recovery_method(self):
+        if not self.status:
+            self.status = TaskStatus(task_id=self.task_id)
+        self.status.recovery_method = None
+        if self.status in TaskStatus.archived_status:
+            self.archive()
+        else:
+            self.save()
 
     def assign_robots(self, robot_ids, api=None, save_in_db=True,):
         self.assigned_robots = robot_ids
