@@ -30,6 +30,17 @@ class Timepoint(EmbeddedMongoModel):
         return f" UTC time {self.utc_time.isoformat()} \t" \
                f" Timezone offset {self.timezone_offset}"
 
+    def __lt__(self, other):
+        return self.utc_time < other.utc_time
+
+    def __add__(self, delta):
+        utc_time = self.utc_time + delta
+        return self.create_new(utc_time=utc_time, timezone_offset=self.timezone_offset)
+
+    def __sub__(self, other):
+        delta = self.utc_time - other.utc_time
+        return delta
+
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
         dict_repr.pop('_cls')
