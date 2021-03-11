@@ -17,6 +17,8 @@ class MongoStore:
         self._connected = False
         self._connection_timeout = kwargs.get('connectTimeoutMS', 30) * 1000
         self.alias = kwargs.get("alias", "default")
+        self.user = kwargs.get("user")
+        self.pwd = kwargs.get("pwd")
 
         self.connect()
 
@@ -24,7 +26,11 @@ class MongoStore:
         if self._connected:
             return
 
-        connection_str = "mongodb://%s:%s/%s" % (self.ip, self.port, self.db_name)
+        if self.user:
+            # Connect with authentication
+            connection_str = "mongodb://%s:%s@%s:%s/%s?authSource=admin" % (self.user, self.pwd, self.ip, self.port, self.db_name)
+        else:
+            connection_str = "mongodb://%s:%s/%s" % (self.ip, self.port, self.db_name)
 
         try:
             # Default timeout is 30s
@@ -57,7 +63,15 @@ class MongoStoreInterface:
 
     @property
     def port(self):
-        return  self._store.port
+        return self._store.port
+
+    @property
+    def user(self):
+        return self._store.user
+
+    @property
+    def pwd(self):
+        return self._store.pwd
 
     def save(self, model):
         if self._store.connected:
