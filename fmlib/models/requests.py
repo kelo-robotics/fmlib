@@ -232,7 +232,10 @@ class TaskRequest(Request):
 
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
+            raise InvalidRequestTime("Latest start time %s is in the past" % self.latest_start_time)
+        elif self.latest_start_time < self.earliest_start_time:
+            raise InvalidRequestTime("Latest start time %s is earlier than the earliest start time %s",
+                                     self.latest_start_time, self.earliest_start_time)
         elif not path_planner.is_valid_location(self.map, self.start_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
         elif not path_planner.is_valid_location(self.map, self.finish_location):
@@ -347,13 +350,11 @@ class TransportationRequest(TaskRequest):
     def from_payload(cls, payload):
         document = super().to_document(payload)
         if "earliest_pickup_time" not in document:
-            earliest_time = TimeStamp(tz=pytz.UTC).to_datetime()
             document["earliest_pickup_time"] = Timepoint(TimeStamp(tz=pytz.UTC).to_datetime(), 0)
         else:
             document["earliest_pickup_time"] = Timepoint.from_payload(document.pop("earliest_pickup_time"))
 
         if "latest_pickup_time" not in document:
-            latest_time= TimeStamp(tz=pytz.UTC).to_datetime()
             document["latest_pickup_time"] = Timepoint(TimeStamp(tz=pytz.UTC, delta=timedelta(minutes=10)).to_datetime(), 0)
         else:
             document["latest_pickup_time"] = Timepoint.from_payload(document.pop("latest_pickup_time"))
@@ -470,13 +471,11 @@ class NavigationRequest(TaskRequest):
     def from_payload(cls, payload):
         document = super().to_document(payload)
         if "earliest_arrival_time" not in document:
-            earliest_time = TimeStamp(tz=pytz.UTC).to_datetime()
             document["earliest_arrival_time"] = Timepoint(TimeStamp(tz=pytz.UTC).to_datetime(), 0)
         else:
             document["earliest_arrival_time"] = Timepoint.from_payload(document.pop("earliest_arrival_time"))
 
         if "latest_arrival_time" not in document:
-            latest_time= TimeStamp(tz=pytz.UTC).to_datetime()
             document["latest_arrival_time"] = Timepoint(TimeStamp(tz=pytz.UTC, delta=timedelta(minutes=10)).to_datetime(), 0)
         else:
             document["latest_arrival_time"] = Timepoint.from_payload(document.pop("latest_arrival_time"))
@@ -579,7 +578,9 @@ class ChargingRequestQuerySet(RequestQuerySet):
                 invalid_requests.append(r)
         return [r for r in requests if r not in invalid_requests]
 
+
 ChargingRequestManager = Manager.from_queryset(ChargingRequestQuerySet)
+
 
 class ChargingRequest(TaskRequest):
     """ Send robot to a charging station and charge until the given charging percentage
@@ -596,7 +597,6 @@ class ChargingRequest(TaskRequest):
         task_type = "ChargingTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
-
 
     @classmethod
     def get_task_requests_by_robot(cls, robot_id):
@@ -617,19 +617,20 @@ class ChargingRequest(TaskRequest):
 
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
-            raise InvalidRequestTime("Latest start time of %s is in the past" % self.latest_start_time)
+            raise InvalidRequestTime("Latest start time %s is in the past" % self.latest_start_time)
+        elif self.latest_start_time < self.earliest_start_time:
+            raise InvalidRequestTime("Latest start time %s is earlier than the earliest start time %s",
+                                     self.latest_start_time, self.earliest_start_time)
 
     @classmethod
     def from_payload(cls, payload):
         document = super().to_document(payload)
         if "earliest_start_time" not in document:
-            earliest_time = TimeStamp(tz=pytz.UTC).to_datetime()
             document["earliest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC).to_datetime(), 0)
         else:
             document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
 
         if "latest_start_time" not in document:
-            latest_time= TimeStamp(tz=pytz.UTC).to_datetime()
             document["latest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC, delta=timedelta(minutes=10)).to_datetime(), 0)
         else:
             document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
@@ -672,13 +673,11 @@ class DisinfectionRequest(TaskRequest):
     def from_payload(cls, payload):
         document = super().to_document(payload)
         if "earliest_start_time" not in document:
-            earliest_time = TimeStamp(tz=pytz.UTC).to_datetime()
             document["earliest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC).to_datetime(), 0)
         else:
             document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
 
         if "latest_start_time" not in document:
-            latest_time= TimeStamp(tz=pytz.UTC).to_datetime()
             document["latest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC, delta=timedelta(minutes=10)).to_datetime(), 0)
         else:
             document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
