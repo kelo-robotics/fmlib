@@ -391,6 +391,21 @@ class Task(MongoModel):
         task.save()
         return task
 
+    def __lt__(self, other):
+        return self.earliest_start_time < other.earliest_start_time
+
+    def earliest_start_time_is_within(self, delta=30, resolution='minutes'):
+        """ Returns True is the earliest start time is within the next x time,
+        by default, within the next 30 minutes
+        """
+        try:
+            _res = {'hours': 3600, 'minutes': 60, 'seconds': 1}.get(resolution)
+            delta = delta * _res
+            latest_time = TimeStamp() + timedelta(seconds=delta)
+            return self.earliest_start_time < latest_time.to_datetime()
+        except NameError:
+            print("Invalid time resolution")
+
     def is_recurrent(self):
         return self.request.is_recurrent()
 
