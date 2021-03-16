@@ -14,6 +14,7 @@ empy = "^3.3.4"
 python-dateutil = "^2.8.1"
 numpy = "1.19.5"
 icalendar = "^4.0.7"
+ropod-common = {git = "https://github.com/kelo-robotics/ropod_common.git", rev = "develop"}
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
