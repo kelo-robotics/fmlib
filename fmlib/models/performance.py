@@ -53,8 +53,7 @@ class TaskPerformance(MongoModel):
             round_id = str(round_id)
         self.allocation.allocation_time[round_id] = allocation_time
         self.allocation.tasks_to_allocate[round_id] = tasks_to_allocate
-        self.allocation.allocated = True
-        self.save()
+        self.allocate()
 
     def update_bids(self, bid):
         if not self.allocation.bids:
@@ -64,7 +63,14 @@ class TaskPerformance(MongoModel):
 
     def update_n_re_allocation_attempts(self):
         self.allocation.n_re_allocation_attempts += 1
+        self.un_allocate()
+
+    def un_allocate(self):
         self.allocation.allocated = False
+        self.save()
+
+    def allocate(self):
+        self.allocation.allocated = True
         self.save()
 
     def update_delay(self, delay):
