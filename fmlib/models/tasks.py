@@ -252,10 +252,12 @@ class TaskProgress(EmbeddedMongoModel):
         for action in task_plan[0].actions:
             self.actions.append(ActionProgress(action.action_id))
 
+
 class TaskStatus(MongoModel, EmbeddedMongoModel):
     task_id = fields.UUIDField(primary_key=True)
     status = fields.IntegerField(default=TaskStatusConst.UNALLOCATED)
     delayed = fields.BooleanField(default=False)
+    early = fields.BooleanField(default=False)
     paused = fields.BooleanField(default=False)
     recovery_method = fields.IntegerField(blank=True)
     progress = fields.EmbeddedDocumentField(TaskProgress)
