@@ -515,6 +515,15 @@ class Task(MongoModel):
         self.status.save()
 
     @property
+    def early(self):
+        return self.status.early
+
+    @early.setter
+    def early(self, boolean):
+        self.status.early = boolean
+        self.status.save()
+
+    @property
     def hard_constraints(self):
         return self.request.hard_constraints
 
