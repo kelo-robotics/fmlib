@@ -240,6 +240,9 @@ class TaskRequest(Request):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.start_location)
         elif not path_planner.is_valid_location(self.map, self.finish_location):
             raise InvalidRequestLocation("%s is not a valid goal location." % self.finish_location)
+        elif self.repetition_pattern and self.repetition_pattern.until and\
+                self.repetition_pattern.until < TimeStamp().to_datetime():
+            raise InvalidRequestTime("Repetition until time %s is in the past" % self.repetition_pattern.until)
 
     @staticmethod
     def map_args(**kwargs):
