@@ -621,9 +621,11 @@ class ChargingRequest(TaskRequest):
     def validate_request(self, path_planner, complete_request=True):
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time %s is in the past" % self.latest_start_time)
-        elif self.latest_start_time < self.earliest_start_time:
+        if self.latest_start_time < self.earliest_start_time:
             raise InvalidRequestTime("Latest start time %s is earlier than the earliest start time %s",
                                      self.latest_start_time, self.earliest_start_time)
+        if self.is_repetitive():
+            raise InvalidRequest("Charging request cannot be repetitive")
 
     @classmethod
     def from_payload(cls, payload):
@@ -688,7 +690,7 @@ class DisinfectionRequest(TaskRequest):
         request.save()
         return request
 
-    def from_recurring_event(self, event, user_id=None):
+    def from_recurring_event(self, event, repetition_pattern=None, user_id=None):
         request_type = self.__class__.__name__
         request_cls = getattr(this_module, request_type)
         kwargs = super().get_common_attrs()
@@ -702,6 +704,8 @@ class DisinfectionRequest(TaskRequest):
                        "area": event.area,
                        "earliest_start_time": earliest_start_time,
                        "latest_start_time": latest_start_time})
+        if repetition_pattern:
+            kwargs.update(repetition_pattern=repetition_pattern)
         if user_id:
             kwargs.update(user_id=user_id)
 
