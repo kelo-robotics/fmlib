@@ -333,9 +333,9 @@ class TaskRequest(Request):
 
 class TransportationRequest(TaskRequest):
 
-    pickup_location = fields.CharField()
+    pickup_location = fields.EmbeddedDocumentField(Position)
     pickup_location_level = fields.IntegerField()
-    delivery_location = fields.CharField()
+    delivery_location = fields.EmbeddedDocumentField(Position)
     delivery_location_level = fields.IntegerField()
     earliest_pickup_time = fields.EmbeddedDocumentField(Timepoint)
     latest_pickup_time = fields.EmbeddedDocumentField(Timepoint)
@@ -454,10 +454,10 @@ class TransportationRequest(TaskRequest):
 
 class NavigationRequest(TaskRequest):
 
-    start_location = fields.CharField()
+    start_location = fields.EmbeddedDocumentField(Position)
     start_location_level = fields.IntegerField()
     waypoints = fields.EmbeddedDocumentListField(Position, blank=True)
-    goal_location = fields.CharField()
+    goal_location = fields.EmbeddedDocumentField(Position)
     goal_location_level = fields.IntegerField()
     earliest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
     latest_arrival_time = fields.EmbeddedDocumentField(Timepoint)
@@ -661,8 +661,8 @@ class GuidanceRequest(NavigationRequest):
 
 class DisinfectionRequest(TaskRequest):
     area = fields.CharField()
-    start_location = fields.CharField()
-    finish_location = fields.CharField()
+    start_location = fields.EmbeddedDocumentField(Position)
+    finish_location = fields.EmbeddedDocumentField(Position)
     earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     dose = fields.IntegerField(default=DisinfectionDose.NORMAL)
