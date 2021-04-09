@@ -62,7 +62,7 @@ class Position(EmbeddedMongoModel):
     x = fields.FloatField()
     y = fields.FloatField()
     theta = fields.FloatField(default=0)
-    name = fields.CharField()
+    id = fields.IntegerField()
     map = fields.CharField()
 
     class Meta:
@@ -82,17 +82,17 @@ class Position(EmbeddedMongoModel):
 
     def __str__(self):
         to_print = "[{}, {}, {}]".format(self.x, self.y, self.theta)
-        if self.map:
+        if self.map is not None:
             to_print += f" map: {self.map}"
-        if self.name:
-            to_print += f" name: {self.name}"
+        if self.id is not None:
+            to_print += f" id : {self.id}"
         return to_print
 
     def update_position(self, **kwargs):
         self.x = kwargs.get('x')
         self.y = kwargs.get('y')
         self.theta = kwargs.get('theta')
-        self.name = kwargs.get('name')
+        self.id = kwargs.get('id')
         self.map = kwargs.get('map')
 
     def get_distance(self, other):
