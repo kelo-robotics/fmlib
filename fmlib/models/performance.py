@@ -17,8 +17,6 @@ class BidPerformance(EmbeddedMongoModel):
 class Allocation(EmbeddedMongoModel):
     allocation_time = fields.DictField()
     tasks_to_allocate = fields.DictField()
-    n_re_allocation_attempts = fields.IntegerField(default=0)
-    allocated = fields.BooleanField(default=False)
     bids = fields.EmbeddedDocumentListField(BidPerformance)
 
 
@@ -53,24 +51,11 @@ class TaskPerformance(MongoModel):
             round_id = str(round_id)
         self.allocation.allocation_time[round_id] = allocation_time
         self.allocation.tasks_to_allocate[round_id] = tasks_to_allocate
-        self.allocate()
 
     def update_bids(self, bid):
         if not self.allocation.bids:
             self.allocation.bids = list()
         self.allocation.bids.append(bid)
-        self.save()
-
-    def update_n_re_allocation_attempts(self):
-        self.allocation.n_re_allocation_attempts += 1
-        self.un_allocate()
-
-    def un_allocate(self):
-        self.allocation.allocated = False
-        self.save()
-
-    def allocate(self):
-        self.allocation.allocated = True
         self.save()
 
     def update_delay(self, delay):
