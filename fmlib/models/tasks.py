@@ -39,8 +39,8 @@ class TaskQuerySet(QuerySet):
             return task
         except ValidationError:
             print(f"Task {task.task_id} has a deprecated format")
-            task.deprecate()
-            raise
+            task = task.deprecate()
+            return task
 
     def get_task(self, task_id):
         """Return a task object matching to a task_id.
@@ -607,7 +607,6 @@ class Task(MongoModel):
         "task_archive" collection. Only the fields that remain valid are stored in the archive_collection.
         (also archive other models associated with the task, i.e. request and task_status)
         """
-        print("Deprecating task: ", self.task_id)
         if not self.status:
             self.status = TaskStatus(task_id=self.task_id)
         self.status.status = TaskStatusConst.DEPRECATED
@@ -627,6 +626,7 @@ class Task(MongoModel):
                 else:
                     delattr(self, field.attname)
         self.archive()
+        return self
 
     def update_status(self, status, api=None):
         if not self.status:

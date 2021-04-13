@@ -350,9 +350,9 @@ class TransportationRequest(TaskRequest):
         archive_collection = TaskRequest.Meta.archive_collection
 
     def clean(self):
-        if not isinstance(self.pickup_location, Position):
+        if not hasattr(self, "pickup_location") or not isinstance(self.pickup_location, Position):
             self.pickup_location = Position()
-        if not isinstance(self.delivery_location, Position):
+        if not hasattr(self, "delivery_location") or not isinstance(self.delivery_location, Position):
             self.delivery_location = Position()
 
     @classmethod
@@ -477,9 +477,9 @@ class NavigationRequest(TaskRequest):
         archive_collection = TaskRequest.Meta.archive_collection
 
     def clean(self):
-        if not isinstance(self.start_location, Position):
+        if not hasattr(self, "start_location") or not isinstance(self.start_location, Position):
             self.start_location = Position()
-        if not isinstance(self.goal_location, Position):
+        if not hasattr(self, "goal_location") or not isinstance(self.goal_location, Position):
             self.goal_location = Position()
 
     @classmethod
@@ -687,9 +687,9 @@ class DisinfectionRequest(TaskRequest):
         archive_collection = TaskRequest.Meta.archive_collection
 
     def clean(self):
-        if not isinstance(self.start_location, Position):
+        if not hasattr(self, "start_location") or not isinstance(self.start_location, Position):
             self.start_location = Position()
-        if not isinstance(self.finish_location, Position):
+        if not hasattr(self, "finish_location") or not isinstance(self.finish_location, Position):
             self.finish_location = Position()
 
     @classmethod
