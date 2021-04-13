@@ -202,8 +202,10 @@ class Dock(Action):
 class Undock(Action):
     pass
 
+
 class Detect(Action):
-    object = fields.CharField()
+    item = fields.CharField()
+
 
 class Charge(Action):
     until_percentage = fields.FloatField()
