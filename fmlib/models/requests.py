@@ -349,6 +349,12 @@ class TransportationRequest(TaskRequest):
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
 
+    def clean(self):
+        if not isinstance(self.pickup_location, Position):
+            self.pickup_location = Position()
+        if not isinstance(self.delivery_location, Position):
+            self.delivery_location = Position()
+
     @classmethod
     def from_payload(cls, payload):
         document = super().to_document(payload)
@@ -469,6 +475,12 @@ class NavigationRequest(TaskRequest):
         task_type = "NavigationTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+
+    def clean(self):
+        if not isinstance(self.start_location, Position):
+            self.start_location = Position()
+        if not isinstance(self.goal_location, Position):
+            self.goal_location = Position()
 
     @classmethod
     def from_payload(cls, payload):
@@ -673,6 +685,12 @@ class DisinfectionRequest(TaskRequest):
         task_type = "DisinfectionTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+
+    def clean(self):
+        if not isinstance(self.start_location, Position):
+            self.start_location = Position()
+        if not isinstance(self.finish_location, Position):
+            self.finish_location = Position()
 
     @classmethod
     def from_payload(cls, payload):

@@ -35,7 +35,7 @@ class TaskQuerySet(QuerySet):
 
     def validate_model(self, task):
         try:
-            task.full_clean()
+            task.clean_fields()
             return task
         except ValidationError:
             print(f"Task {task.task_id} has a deprecated format")
@@ -607,6 +607,7 @@ class Task(MongoModel):
         "task_archive" collection. Only the fields that remain valid are stored in the archive_collection.
         (also archive other models associated with the task, i.e. request and task_status)
         """
+        print("Deprecating task: ", self.task_id)
         if not self.status:
             self.status = TaskStatus(task_id=self.task_id)
         self.status.status = TaskStatusConst.DEPRECATED
@@ -930,10 +931,10 @@ class ChargingTask(Task):
 
     @property
     def start_location(self):
-        return self.charging_station.position.name
+        return self.charging_station.position
 
     @property
     def finish_location(self):
-        return self.charging_station.position.name
+        return self.charging_station.position
 
     objects = TaskManager()
