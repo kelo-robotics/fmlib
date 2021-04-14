@@ -65,5 +65,10 @@ def load_yaml_config_file(file_name):
         raise
 
 
+def log_time_to_file(text, file_name="timeit.txt"):
+    with open(file_name, "a") as f:
+        f.write(text)
+
+
 task_status_names = {value: name for name, value in vars(TaskStatus).items() if name.isupper()}
 action_status_names = {value: name for name, value in vars(ActionStatus).items() if name.isupper()}
