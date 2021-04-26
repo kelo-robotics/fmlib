@@ -142,6 +142,7 @@ class TaskRequest(Request):
     valid = fields.BooleanField()
     repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern)
     event = fields.ReferenceField(Event)
+    velocity = fields.FloatField(default=1)
 
     objects = RequestManager()
 
@@ -730,7 +731,8 @@ class DisinfectionRequest(TaskRequest):
         request = request_cls.create_new(**kwargs)
         return request
 
-    def get_velocity(self):
+    @property
+    def velocity(self):
         """ Returns max velocity (m/s) based on the dose """
         if self.dose == DisinfectionDose.HIGH:
             velocity = 0.1
