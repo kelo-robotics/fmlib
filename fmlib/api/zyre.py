@@ -1,4 +1,5 @@
 import logging
+from queue import Queue
 
 from ropod.pyre_communicator.base_class import RopodPyre
 from ropod.utils.logging.counter import ContextFilter
@@ -12,6 +13,7 @@ class ZyreInterface(RopodPyre):
         self.callback_dict = dict()
         self.debug_messages = kwargs.get('debug_messages', list())
         self.publish_dict = kwargs.get('publish', dict())
+        self.queue = Queue()
 
     def register_callback(self, function, msg_type, **kwargs):
         self.logger.debug("Adding callback function %s for message type %s", function.__name__,
@@ -33,22 +35,30 @@ class ZyreInterface(RopodPyre):
             payload = dict_msg.get('payload')
             self.logger.debug("Received %s message, with payload %s", message_type, payload)
 
-        callback = None
+        self.queue.put(dict_msg)
 
-        try:
-            callback = self.callback_dict.get(message_type, None)
-            if callback is None:
-                raise AttributeError
-        except AttributeError:
-            self.logger.error("No callback function found for %s messages. Callback dictionary: %s",
-                              message_type, self.callback_dict)
+    def process_msgs(self):
+        while not self.queue.empty():
+            dict_msg = self.queue.get()
+            message_type = dict_msg['header']['type']
 
-        try:
-            if callback:
-                getattr(self, callback)(dict_msg)
-        except AttributeError:
-            self.logger.error("Could not execute callback %s ", callback, exc_info=True)
+            callback = None
+
+            try:
+                callback = self.callback_dict.get(message_type, None)
+                if callback is None:
+                    raise AttributeError
+            except AttributeError:
+                self.logger.error("No callback function found for %s messages. Callback dictionary: %s",
+                                  message_type, self.callback_dict)
+
+            try:
+                if callback:
+                    getattr(self, callback)(dict_msg)
+            except AttributeError:
+                self.logger.error("Could not execute callback %s ", callback, exc_info=True)
 
     def run(self):
+        self.process_msgs()
         if self.acknowledge:
             self.resend_message_cb()
