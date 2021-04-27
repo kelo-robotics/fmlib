@@ -15,6 +15,7 @@ python-dateutil = "^2.8.1"
 numpy = "1.19.5"
 icalendar = "^4.0.7"
 ropod-common = {git = "https://github.com/kelo-robotics/ropod_common.git", rev = "develop"}
+paho-mqtt = "^1.5.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
