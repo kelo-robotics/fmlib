@@ -12,6 +12,8 @@ class MQTTInterface:
 
         self.host = kwargs.get("host", "127.0.0.1")
         self.port = kwargs.get("port", 1883)
+        self.user = kwargs.get("user")
+        self.password = kwargs.get("password")
         self.client = mqtt.Client(client_id=client_id)
 
         self.subtopics = kwargs.get("subtopics", list())
@@ -33,6 +35,8 @@ class MQTTInterface:
     def connect(self):
         if self._connected:
             return
+        if self.user:
+            self.client.username_pw_set(username=self.user, password=self.password)
         self.client.on_connect = self.on_connect
         self.client.connect(self.host, self.port)
 
