@@ -93,6 +93,12 @@ class RobotQuerySet(QuerySet):
         robot = self.get({'_id': robot_id})
         return self.validate_model(robot)
 
+    def by_serial_number(self, serial_number):
+        robots = [r for r in self.raw({"serial_number": serial_number})]
+        if robots:
+            return robots.pop()
+        return None
+
 
 RobotManager = Manager.from_queryset(RobotQuerySet)
 
@@ -100,6 +106,7 @@ RobotManager = Manager.from_queryset(RobotQuerySet)
 class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
+    serial_number = fields.CharField()
     version = fields.EmbeddedDocumentField(Version)
     simulator = fields.CharField()
     status = fields.EmbeddedDocumentField(RobotStatus)
@@ -153,6 +160,10 @@ class Robot(MongoModel):
     @classmethod
     def get_robot(cls, robot_id):
         return cls.objects.get_robot(robot_id)
+
+    @classmethod
+    def by_serial_number(cls, serial_number):
+        return cls.objects.by_serial_number(serial_number)
 
     @classmethod
     def get_robots(cls):
