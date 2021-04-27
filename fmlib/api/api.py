@@ -4,10 +4,12 @@ send messages through the network using a variety of middlewares
 
 import logging
 
+from ropod.utils.logging.counter import ContextFilter
+
+from fmlib.api.mqtt import MQTTInterface
 from fmlib.api.rest.interface import RESTInterface
 from fmlib.api.zyre import ZyreInterface
 from fmlib.utils.messages import MessageFactory
-from ropod.utils.logging.counter import ContextFilter
 
 
 class API:
@@ -15,7 +17,7 @@ class API:
 
         Args:
             middleware: a list of middleware to configure.
-            The keyword arguments should containing the desired configuration
+            The keyword arguments should contain the desired configuration
             matching the middleware listed
 
         Attributes:
@@ -26,8 +28,8 @@ class API:
     """
 
     def __init__(self, middleware, **kwargs):
-        self.logger_name = kwargs.get("logger_name", "api")
-        self.logger = logging.getLogger(self.logger_name)
+        logger_name = kwargs.get("logger_name", "api")
+        self.logger = logging.getLogger(logger_name)
         self.logger.addFilter(ContextFilter())
 
         self.publish_dict = dict()
@@ -88,6 +90,8 @@ class API:
                 interface = self.get_zyre_api(config)
             elif option == 'rest':
                 interface = self.get_rest_api(config)
+            elif option == 'mqtt':
+                interface = self.get_mqtt_api(config, **config_params)
 
             self.__dict__[option] = interface
             self.interfaces.append(interface)
@@ -122,6 +126,21 @@ class API:
 
         """
         return RESTInterface(**rest_config)
+
+    @classmethod
+    def get_mqtt_api(cls, mqtt_config, **kwargs):
+        """Create an object of type MQTTInterface
+
+        Args:
+            mqtt_config: A dictionary containing the API configuration
+
+        Returns:
+            A configured MQTTInterface object
+
+        """
+        robots = kwargs.get("robots", dict())
+        mqtt_config.update(robots=robots)
+        return MQTTInterface(**mqtt_config)
 
     def register_callbacks(self, obj, callback_config=None):
         for option in self.middleware_collection:
