@@ -1,3 +1,4 @@
+import json
 import logging
 from queue import Queue
 
@@ -85,6 +86,8 @@ class MQTTInterface:
             msg = self.queue.get()
             self.logger.debug("Processing message topic: %s", msg.topic)
             subtopic = msg.topic.split("/")[-1]
+            msg_str = msg.payload.decode('utf-8')
+            msg_dict = json.loads(msg_str)
 
             callback = None
 
@@ -98,7 +101,7 @@ class MQTTInterface:
 
             try:
                 if callback:
-                    getattr(self, callback)(msg)
+                    getattr(self, callback)(msg_dict)
             except AttributeError:
                 self.logger.error("Could not execute callback %s ", callback, exc_info=True)
 
