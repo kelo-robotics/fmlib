@@ -3,16 +3,22 @@ import logging
 import pickle
 
 from pymodm import fields, MongoModel
+from pymodm.errors import DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 
 
 class TimetableQuerySet(QuerySet):
+
     def get_timetable(self, robot_id):
         """ Returns a timetable mongo model that matches to the robot_id
         """
-        return self.get({'_id': robot_id})
+        try:
+            return self.get({'_id': robot_id})
+        except ValueError:
+            print(f"Timetable {robot_id} has a deprecated format")
+            raise DoesNotExist
 
 
 TimetableManager = Manager.from_queryset(TimetableQuerySet)
@@ -26,7 +32,6 @@ class Timetable(MongoModel):
 
     class Meta:
         archive_collection = 'timetable_archive'
-        ignore_unknown_fields = True
         meta_model = "timetable"
 
     @property
