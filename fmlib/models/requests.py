@@ -139,7 +139,7 @@ class TaskRequest(Request):
     hard_constraints = fields.BooleanField(default=True)
     eligible_robots = fields.ListField(blank=True)
     map = fields.CharField()
-    valid = fields.BooleanField()
+    valid = fields.BooleanField(default=True)
     repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern)
     event = fields.ReferenceField(Event)
 
