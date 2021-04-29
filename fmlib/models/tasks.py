@@ -8,14 +8,6 @@ from typing import List, Optional
 import dateutil.parser
 import pytz
 from bson.codec_options import CodecOptions
-from fmlib.models import requests
-from fmlib.models.actions import Action, ActionProgress, EstimatedDuration
-from fmlib.models.charging_station import ChargingStation
-from fmlib.models.environment import Position
-from fmlib.models.timetable import Timetable
-from fmlib.utils.messages import Document
-from fmlib.utils.messages import Message
-from fmlib.utils.messages import MessageFactory
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
@@ -25,6 +17,14 @@ from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import ActionStatus, TaskStatus as TaskStatusConst
 from ropod.utils.timestamp import TimeStamp
+
+from fmlib.models import requests
+from fmlib.models.actions import Action, ActionProgress, EstimatedDuration
+from fmlib.models.charging_station import ChargingStation
+from fmlib.models.environment import Position
+from fmlib.utils.messages import Document
+from fmlib.utils.messages import Message
+from fmlib.utils.messages import MessageFactory
 
 this_module = sys.modules[__name__]
 
@@ -417,27 +417,6 @@ class Task(MongoModel):
     @property
     def task_type(self):
         return self.request.Meta.task_type
-
-    @property
-    def departure_time(self):
-        if self.assigned_robots:
-            robot_id = self.assigned_robots[0]
-            timetable = Timetable.get_timetable(robot_id)
-            return timetable.get_time(self.task_id, "departure")
-
-    @property
-    def start_time(self):
-        if self.assigned_robots:
-            robot_id = self.assigned_robots[0]
-            timetable = Timetable.get_timetable(robot_id)
-            return timetable.get_time(self.task_id, "start")
-
-    @property
-    def finish_time(self):
-        if self.assigned_robots:
-            robot_id = self.assigned_robots[0]
-            timetable = Timetable.get_timetable(robot_id)
-            return timetable.get_time(self.task_id, "finish")
 
     @property
     def start_location(self):

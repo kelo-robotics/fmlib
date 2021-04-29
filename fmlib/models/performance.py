@@ -2,7 +2,6 @@ import uuid
 
 from fmlib.models.robot import RobotManager
 from fmlib.models.tasks import TaskManager
-from fmlib.models.timetable import Timetable
 from pymodm import fields, MongoModel, EmbeddedMongoModel
 from pymodm.errors import DoesNotExist
 
@@ -90,7 +89,6 @@ class TaskPerformance(MongoModel):
 
 class RobotPerformance(MongoModel):
     robot_id = fields.IntegerField(primary_key=True)
-    timetables = fields.EmbeddedDocumentListField(Timetable)
 
     objects = RobotManager()
 
@@ -107,13 +105,6 @@ class RobotPerformance(MongoModel):
         performance = cls(robot_id=robot_id)
         performance.save()
         return performance
-
-    def update_timetables(self, timetable):
-        if not self.timetables:
-            self.timetables = list()
-        timetable_model = timetable.to_model()
-        self.timetables.append(timetable_model)
-        self.save()
 
     @classmethod
     def get_robot(cls, robot_id, **kwargs):
