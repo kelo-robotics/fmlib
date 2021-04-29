@@ -142,7 +142,6 @@ class TaskRequest(Request):
     valid = fields.BooleanField()
     repetition_pattern = fields.EmbeddedDocumentField(RepetitionPattern)
     event = fields.ReferenceField(Event)
-    velocity = fields.FloatField(default=1)
 
     objects = RequestManager()
 
@@ -163,6 +162,10 @@ class TaskRequest(Request):
         with switch_collection(self, TaskRequest.Meta.archive_collection):
             self.save()
         self.delete()
+
+    @property
+    def velocity(self):
+        return 1  # m/s
 
     @property
     def task_type(self):
