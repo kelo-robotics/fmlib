@@ -3,6 +3,7 @@ import logging
 import pickle
 
 from pymodm import fields, MongoModel
+from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
@@ -51,8 +52,24 @@ class Timetable(MongoModel):
         return pickle.loads(codecs.decode(timetable.data.encode(), "base64"))
 
     @classmethod
+    def get_archived_timetable(cls, robot_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.get_timetable(robot_id)
+
+    @classmethod
     def from_obj(cls, obj):
         robot_id = obj.robot.robot_id
         data = codecs.encode(pickle.dumps(obj, 2), "base64").decode()
         timetable = cls(robot_id=robot_id, data=data)
+        return timetable
+
+    @classmethod
+    def save_obj(cls, obj):
+        timetable = cls.from_obj(obj)
         timetable.save()
+
+    @classmethod
+    def archive_obj(cls, obj):
+        archived_timetable = cls.from_obj(obj)
+        with switch_collection(cls, cls.Meta.archive_collection):
+            archived_timetable.save()
