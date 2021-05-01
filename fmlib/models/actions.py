@@ -25,12 +25,14 @@ class ActionQuerySet(QuerySet):
 
 ActionManager = Manager.from_queryset(ActionQuerySet)
 
+
 class ActionProgressQuerySet(QuerySet):
 
     def get_action_progress(self, action_id):
         if isinstance(action_id, str):
             action_id = uuid.UUID(action_id)
         return self.get({'_id': action_id})
+
 
 ActionProgressManager = Manager.from_queryset(ActionProgressQuerySet)
 
@@ -275,6 +277,18 @@ class ActionProgress(MongoModel, EmbeddedMongoModel):
         with switch_collection(ActionProgress, ActionProgress.Meta.archive_collection):
             super().save()
         self.delete()
+
+    @classmethod
+    def get_action_progress(cls, action_id):
+        try:
+            return cls.objects.get_action_progress(action_id)
+        except DoesNotExist:
+            return cls.get_archived_action_progress(action_id)
+
+    @classmethod
+    def get_archived_action_progress(cls, action_id):
+        with switch_collection(cls, cls.Meta.archive_collection):
+            return cls.objects.get_action_progress(action_id)
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()
