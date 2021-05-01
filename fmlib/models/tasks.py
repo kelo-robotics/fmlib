@@ -200,7 +200,7 @@ class TaskProgress(EmbeddedMongoModel):
         self.current_pose = robot_pose
         self.update_action_progress(action_id, action_status, **kwargs)
 
-        if action_status == ActionStatus.COMPLETED:
+        if action_status == ActionStatus.FINISHED:
             action_progress = self.get_action(action_id)
             action_progress.archive()
 
@@ -264,7 +264,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
 
     objects = TaskStatusManager()
 
-    archived_status = [TaskStatusConst.COMPLETED,
+    archived_status = [TaskStatusConst.FINISHED,
                        TaskStatusConst.CANCELED,
                        TaskStatusConst.ABORTED,
                        TaskStatusConst.FAILED,
@@ -275,7 +275,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
                     TaskStatusConst.ALLOCATED,
                     TaskStatusConst.SCHEDULED,
                     TaskStatusConst.DISPATCHED,
-                    TaskStatusConst.ONGOING]
+                    TaskStatusConst.RUNNING]
 
     class Meta:
         archive_collection = 'task_status_archive'
@@ -293,7 +293,7 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
     def archive(self):
         if self.progress:
             for action_progress in self.progress.actions:
-                if action_progress != ActionStatus.COMPLETED:
+                if action_progress != ActionStatus.FINISHED:
                     action_progress.archive()
 
         with switch_collection(TaskStatus, TaskStatus.Meta.archive_collection):
@@ -690,8 +690,8 @@ class Task(MongoModel):
     def is_frozen(self):
         if self.status.status in [TaskStatusConst.SCHEDULED,
                                   TaskStatusConst.DISPATCHED,
-                                  TaskStatusConst.ONGOING,
-                                  TaskStatusConst.COMPLETED]:
+                                  TaskStatusConst.RUNNING,
+                                  TaskStatusConst.FINISHED]:
             return True
         return False
 
@@ -701,7 +701,7 @@ class Task(MongoModel):
         else:
             actions = list()
             for action_progress in self.status.progress.actions:
-                if action_progress.status != ActionStatus.COMPLETED:
+                if action_progress.status != ActionStatus.FINISHED:
                     action = Action.get_action(action_progress.action_id)
                     actions.append(action)
             return actions
