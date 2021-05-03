@@ -103,6 +103,15 @@ class RobotQuerySet(QuerySet):
 RobotManager = Manager.from_queryset(RobotQuerySet)
 
 
+class Load(EmbeddedMongoModel):
+    load_id = fields.CharField()
+    load_type = fields.CharField()
+
+    def update(self, **kwargs):
+        self.load_id = kwargs.get("load_id")
+        self.load_type = kwargs.get("load_type")
+
+
 class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
@@ -113,6 +122,7 @@ class Robot(MongoModel):
     position = fields.EmbeddedDocumentField(Position)
     capabilities = fields.ListField(default=["navigation"])
     min_battery_level = fields.FloatField()
+    load = fields.EmbeddedDocumentField(Load, blank=True)
 
     objects = RobotManager()
 
@@ -191,6 +201,12 @@ class Robot(MongoModel):
 
     def update_battery(self, battery):
         self.status.battery = battery
+        self.save()
+
+    def update_load(self, **kwargs):
+        if not self.load:
+            self.load = Load()
+        self.load.update(**kwargs)
         self.save()
 
     def is_capable(self, task):
