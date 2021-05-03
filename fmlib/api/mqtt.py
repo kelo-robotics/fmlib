@@ -50,7 +50,6 @@ class MQTTInterface:
     def on_message(self, client, userdata, msg):
 
         if any(subtopic in msg.topic for subtopic in self.subtopics):
-            self.logger.debug("Received message %s", msg.topic)
             self.queue.put(msg)
 
     @property
@@ -84,7 +83,6 @@ class MQTTInterface:
     def process_msgs(self):
         while not self.queue.empty():
             msg = self.queue.get()
-            self.logger.debug("Processing message topic: %s", msg.topic)
             subtopic = msg.topic.split("/")[-1]
             msg_str = msg.payload.decode('utf-8')
             msg_dict = json.loads(msg_str)
