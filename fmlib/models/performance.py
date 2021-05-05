@@ -50,6 +50,7 @@ class TaskPerformance(MongoModel):
             round_id = str(round_id)
         self.allocation.allocation_time[round_id] = allocation_time
         self.allocation.tasks_to_allocate[round_id] = tasks_to_allocate
+        self.save()
 
     def update_bids(self, bid):
         if not self.allocation.bids:

@@ -211,6 +211,11 @@ class Detect(Action):
 
 class Charge(Action):
     until_percentage = fields.FloatField()
+    duration = fields.FloatField()  # seconds
+
+
+class UndockCharger(Action):
+    pass
 
 
 class Navigation(Action):
