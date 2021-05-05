@@ -607,6 +607,7 @@ class ChargingRequest(TaskRequest):
     """
     robot = fields.ReferenceField(Robot)
     charging_percentage = fields.FloatField(default=100)
+    duration = fields.FloatField(default=14400)  # seconds
     earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     priority = fields.IntegerField(default=TaskPriority.HIGH)
