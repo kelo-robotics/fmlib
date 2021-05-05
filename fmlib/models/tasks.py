@@ -917,3 +917,7 @@ class ChargingTask(Task):
         return self.charging_station.position
 
     objects = TaskManager()
+
+
+class StopChargingTask(ChargingTask):
+    objects = TaskManager()

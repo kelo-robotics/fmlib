@@ -15,12 +15,13 @@ from fmlib.models.users import User
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
-from pymodm.errors import ValidationError
+from pymodm.errors import ValidationError, DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.task import TaskPriority, DisinfectionDose
 from ropod.utils.timestamp import TimeStamp
+from ropod.structs.status import AvailabilityStatus
 
 this_module = sys.modules[__name__]
 
@@ -642,6 +643,74 @@ class ChargingRequest(TaskRequest):
                                      self.latest_start_time, self.earliest_start_time)
         if self.is_repetitive():
             raise InvalidRequest("Charging request cannot be repetitive")
+
+    @classmethod
+    def from_payload(cls, payload):
+        document = super().to_document(payload)
+        if "earliest_start_time" not in document:
+            document["earliest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC).to_datetime(), 0)
+        else:
+            document["earliest_start_time"] = Timepoint.from_payload(document.pop("earliest_start_time"))
+
+        if "latest_start_time" not in document:
+            document["latest_start_time"] = Timepoint(TimeStamp(tz=pytz.UTC, delta=timedelta(minutes=10)).to_datetime(), 0)
+        else:
+            document["latest_start_time"] = Timepoint.from_payload(document.pop("latest_start_time"))
+        request = cls.from_document(document)
+        request.save()
+        return request
+
+    def to_dict(self):
+        dict_repr = super().to_dict()
+        dict_repr["earliest_start_time"] = self.earliest_start_time.to_dict()
+        dict_repr["latest_start_time"] = self.latest_start_time.to_dict()
+        return dict_repr
+
+
+class StopChargingRequest(TaskRequest):
+    """
+    Stop executing charging task. Sent at the end of a charging task or to interrupt an ongoing charging task
+    """
+    earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
+    latest_start_time = fields.EmbeddedDocumentField(Timepoint)
+    priority = fields.IntegerField(default=TaskPriority.HIGH)
+
+    class Meta:
+        task_type = "StopChargingTask"
+        collection_name = TaskRequest.Meta.collection_name
+        archive_collection = TaskRequest.Meta.archive_collection
+
+    @staticmethod
+    def map_args(**kwargs):
+        # Locations are taken from the charging station (filled it in the task)
+        try:
+            kwargs.pop("start_location")
+        except KeyError:
+            pass
+        try:
+            kwargs.pop("finish_location")
+        except KeyError:
+            pass
+        return kwargs
+
+    def validate_request(self, path_planner, complete_request=True):
+        if len(self.eligible_robots) != 1:
+            raise InvalidRequest("Stop charging request should include one eligible robot")
+        try:
+            robot = Robot.get_robot(self.eligible_robots[0])
+        except DoesNotExist:
+            raise InvalidRequest("Robot %s does not exist", self.eligible_robots[0])
+
+        if robot.status.availability.status != AvailabilityStatus.CHARGING:
+            raise InvalidRequest("Robot %s is not charging", self.eligible_robots[0])
+
+        if self.latest_start_time.utc_time < TimeStamp().to_datetime():
+            raise InvalidRequestTime("Latest start time %s is in the past" % self.latest_start_time)
+        if self.latest_start_time < self.earliest_start_time:
+            raise InvalidRequestTime("Latest start time %s is earlier than the earliest start time %s",
+                                     self.latest_start_time, self.earliest_start_time)
+        if self.is_repetitive():
+            raise InvalidRequest("Stop charging request cannot be repetitive")
 
     @classmethod
     def from_payload(cls, payload):
