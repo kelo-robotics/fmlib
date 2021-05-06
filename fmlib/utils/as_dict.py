@@ -2,9 +2,11 @@
 https://realpython.com/inheritance-composition-python/#mixing-features-with-mixin-classes
 """
 import uuid
-from datetime import datetime
 
 from fmlib.utils.messages import Document
+from ropod.utils.timestamp import TimeStamp
+from ropod.utils.uuid import from_str
+from datetime import datetime
 
 
 class AsDictMixin:
@@ -46,3 +48,20 @@ class AsDictMixin:
     def from_dict(cls, dict_repr):
         attrs = cls.to_attrs(dict_repr)
         return cls(**attrs)
+
+    @classmethod
+    def to_attrs(cls, dict_repr):
+        attrs = dict()
+        for key, value in dict_repr.items():
+            if value is not None:
+                attrs[key] = cls._get_value(key, value)
+        return attrs
+
+    @classmethod
+    def _get_value(cls, key, value):
+        if key in ['task_id', 'round_id', 'action_id']:
+            return from_str(value)
+        elif key in ['ztp', 'closure_time', 'earliest_start_time']:
+            return TimeStamp.from_str(value)
+        else:
+            return value
