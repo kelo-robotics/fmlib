@@ -916,6 +916,11 @@ class ChargingTask(Task):
     def finish_location(self):
         return self.charging_station.position
 
+    def to_icalendar_event(self):
+        event = super().to_icalendar_event()
+        event.add('robot', self.request.robot.robot_id)
+        return event
+
     objects = TaskManager()
 
 

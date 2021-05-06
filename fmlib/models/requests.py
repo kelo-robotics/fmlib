@@ -333,7 +333,7 @@ class TaskRequest(Request):
         for attr in self.__dict__['_data'].__dict__['_members']:
             if attr not in ignore_attrs:
                 kwargs[attr] = getattr(self, attr)
-        return  kwargs
+        return kwargs
 
 
 class TransportationRequest(TaskRequest):
@@ -666,6 +666,29 @@ class ChargingRequest(TaskRequest):
         dict_repr["earliest_start_time"] = self.earliest_start_time.to_dict()
         dict_repr["latest_start_time"] = self.latest_start_time.to_dict()
         return dict_repr
+
+    def from_recurring_event(self, event, repetition_pattern=None, user_id=None):
+        request_type = self.__class__.__name__
+        request_cls = getattr(this_module, request_type)
+        kwargs = self.get_common_attrs()
+
+        timezone_offset = event.start.utcoffset().total_seconds()/60
+        earliest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_start_time = Timepoint(event.start.astimezone(pytz.utc), timezone_offset)
+        latest_start_time.postpone(event.start_delta)
+
+        kwargs.update({"event": event.uid,
+                       "eligible_robots": [event.robot],
+                       "earliest_start_time": earliest_start_time,
+                       "latest_start_time": latest_start_time})
+
+        if repetition_pattern:
+            kwargs.update(repetition_pattern=repetition_pattern)
+        if user_id:
+            kwargs.update(user_id=user_id)
+
+        request = request_cls.create_new(**kwargs)
+        return request
 
 
 class StopChargingRequest(TaskRequest):
