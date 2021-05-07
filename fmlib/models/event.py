@@ -2,11 +2,13 @@ import datetime
 import uuid
 
 import dateutil.parser
+import pytz
 from fmlib.utils.messages import Document
-from icalendar import Calendar, Event as ICalendarEvent
+from icalendar import Calendar, Timezone, Event as ICalendarEvent
 from icalendar.prop import vRecur, vDDDTypes, vDDDLists
 from pymodm import fields, MongoModel
 from pymodm.context_managers import switch_collection
+from pymodm.files import File
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
@@ -23,7 +25,9 @@ class EventQuerySet(QuerySet):
 
         return self.get({'_id': uid})
 
+
 EventManager = Manager.from_queryset(EventQuerySet)
+
 
 class Event(MongoModel):
     uid = fields.UUIDField(primary_key=True)
@@ -197,3 +201,42 @@ class Event(MongoModel):
     def get_event(cls, uid):
         return cls.objects.get_event(uid)
 
+
+class CalendarFileQuerySet(QuerySet):
+
+    def get_calendar_file(self, map_name):
+        return self.get({'_id': map_name})
+
+
+CalendarManager = Manager.from_queryset(CalendarFileQuerySet)
+
+
+class CalendarFile(MongoModel):
+    map_name = fields.CharField(primary_key=True)
+    file = fields.FileField()
+
+    objects = CalendarManager()
+
+    @classmethod
+    def create_new(cls, map_name, tz=pytz.UTC):
+        new = cls(map_name=map_name)
+
+        cal = Calendar()
+        timezone = Timezone()
+        timezone.add('TZID', tz)
+        timezone.to_ical()
+        cal.add_component(timezone)
+        new.store_file(cal)
+        return new
+
+    @classmethod
+    def get_calendar_file(cls, map_name):
+        return cls.objects.get_calendar_file(map_name)
+
+    def store_file(self, calendar):
+        f = open(self.map_name + '.ics', 'wb')
+        f.write(calendar.to_ical())
+        f.close()
+        calendar_file = File(open(self.map_name + '.ics'))
+        self.file = calendar_file
+        self.save()
