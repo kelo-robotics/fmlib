@@ -342,6 +342,12 @@ class TaskStatus(MongoModel, EmbeddedMongoModel):
         return dict_repr
 
 
+class Schedule(EmbeddedMongoModel):
+    departure_time = fields.DateTimeField()
+    start_time = fields.DateTimeField()
+    finish_time = fields.DateTimeField()
+
+
 class Task(MongoModel):
     task_id = fields.UUIDField(primary_key=True)
     parent_task_id = fields.UUIDField(blank=True)
@@ -350,7 +356,7 @@ class Task(MongoModel):
     assigned_robots = fields.ListField(blank=True)
     plan = fields.EmbeddedDocumentListField(TaskPlan, blank=True)
     constraints = fields.EmbeddedDocumentField(TaskConstraints)
-    scheduled_time = fields.EmbeddedDocumentField(TimepointConstraint)
+    schedule = fields.EmbeddedDocumentField(Schedule)
     eligible_robots = fields.ListField(blank=True)
     capable_robots = fields.ListField(blank=True)
     timeout_time = fields.DateTimeField(blank=True)
@@ -674,8 +680,8 @@ class Task(MongoModel):
         self.update_status(TaskStatusConst.PLANNED, api)
         self.save()
 
-    def schedule(self, earliest_time, latest_time, api=None):
-        self.scheduled_time = TimepointConstraint(earliest_time=earliest_time, latest_time=latest_time)
+    def schedule_task(self, departure_time, start_time, finish_time, api=None):
+        self.schedule = Schedule(departure_time, start_time, finish_time)
         self.update_status(TaskStatusConst.SCHEDULED, api)
         self.save()
 
