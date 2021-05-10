@@ -166,7 +166,7 @@ class TaskRequest(Request):
 
     @property
     def velocity(self):
-        return 1  # m/s
+        return 1.5  # m/s
 
     @property
     def task_type(self):
