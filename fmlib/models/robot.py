@@ -2,6 +2,7 @@ import logging
 
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
+from pymodm.errors import DoesNotExist
 from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
@@ -97,7 +98,7 @@ class RobotQuerySet(QuerySet):
         robots = [r for r in self.raw({"serial_number": serial_number})]
         if robots:
             return robots.pop()
-        return None
+        raise DoesNotExist
 
 
 RobotManager = Manager.from_queryset(RobotQuerySet)
