@@ -117,6 +117,7 @@ class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
     serial_number = fields.CharField()
+    width = fields.FloatField()
     version = fields.EmbeddedDocumentField(Version)
     simulator = fields.CharField()
     status = fields.EmbeddedDocumentField(RobotStatus)
