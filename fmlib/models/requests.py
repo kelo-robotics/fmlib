@@ -12,6 +12,7 @@ from fmlib.models.environment import Timepoint
 from fmlib.models.event import Event
 from fmlib.models.robot import Robot
 from fmlib.models.users import User
+from fmlib.models.waiting_location import WaitingLocation
 from fmlib.utils.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
@@ -19,9 +20,9 @@ from pymodm.errors import ValidationError, DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
+from ropod.structs.status import AvailabilityStatus
 from ropod.structs.task import TaskPriority, DisinfectionDose
 from ropod.utils.timestamp import TimeStamp
-from ropod.structs.status import AvailabilityStatus
 
 this_module = sys.modules[__name__]
 
@@ -578,6 +579,7 @@ class DefaultNavigationRequest(NavigationRequest):
     """ Send robot to its waiting location
     """
     robot = fields.ReferenceField(Robot)
+    waiting_location = fields.ReferenceField(WaitingLocation)
     objects = RequestManager()
 
     class Meta:
