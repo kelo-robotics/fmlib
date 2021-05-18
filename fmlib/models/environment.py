@@ -62,7 +62,7 @@ class Position(EmbeddedMongoModel):
     x = fields.FloatField()
     y = fields.FloatField()
     theta = fields.FloatField(default=0)
-    id = fields.IntegerField()
+    id = fields.IntegerField(blank=True)
     map = fields.CharField()
 
     class Meta:
