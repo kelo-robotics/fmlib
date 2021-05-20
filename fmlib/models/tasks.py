@@ -624,7 +624,6 @@ class Task(MongoModel):
             self.status.save()
             self.save()
         if api:
-            time.sleep(0.5)
             self.publish_task_update(api)
 
     def set_recovery_method(self, method, api=None):
@@ -633,7 +632,6 @@ class Task(MongoModel):
         self.status.recovery_method = method
         self.save()
         if api:
-            time.sleep(0.5)
             self.publish_task_update(api)
 
     def clear_recovery_method(self):
