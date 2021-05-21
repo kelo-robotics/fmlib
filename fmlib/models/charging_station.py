@@ -14,12 +14,12 @@ class ChargingStationQuerySet(QuerySet):
             charging_station.full_clean()
             return charging_station
         except ValidationError:
-            print(f"Charging station {charging_station.station_id} has a deprecated format")
+            print(f"Charging station {charging_station.station_name} has a deprecated format")
             charging_station.deprecate()
             raise
 
-    def get_charging_station(self, station_id):
-        charging_station = self.get({'_id': station_id})
+    def get_charging_station(self, station_name):
+        charging_station = self.get({'_id': station_name})
         return self.validate_model(charging_station)
 
     def by_status(self, status):
@@ -37,7 +37,7 @@ ChargingStationManager = Manager.from_queryset(ChargingStationQuerySet)
 
 
 class ChargingStation(MongoModel):
-    station_id = fields.IntegerField(primary_key=True)
+    station_name = fields.CharField(primary_key=True)
     position = fields.EmbeddedDocumentField(Position)
     status = fields.IntegerField(default=AvailabilityStatus.IDLE)
 
@@ -70,16 +70,16 @@ class ChargingStation(MongoModel):
         self.archive()
 
     @classmethod
-    def create_new(cls, station_id, **kwargs):
+    def create_new(cls, station_name, **kwargs):
         if 'position' not in kwargs.keys():
             kwargs.update(position=Position())
-        charging_station = cls(station_id, **kwargs)
+        charging_station = cls(station_name, **kwargs)
         charging_station.save()
         return charging_station
 
     @classmethod
-    def get_charging_station(cls, station_id):
-        return cls.objects.get_charging_station(station_id)
+    def get_charging_station(cls, station_name):
+        return cls.objects.get_charging_station(station_name)
 
     @classmethod
     def by_status(cls, status):
