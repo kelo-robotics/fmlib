@@ -1,6 +1,5 @@
 import logging
 import sys
-import time
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -914,16 +913,21 @@ class ChargingTask(Task):
 
     @property
     def start_location(self):
-        return self.charging_station.position
+        if self.charging_station:
+            return self.charging_station.position
 
     @property
     def finish_location(self):
-        return self.charging_station.position
+        return self.start_location
 
     def to_icalendar_event(self):
         event = super().to_icalendar_event()
         event.add('robot', self.request.robot.robot_id)
         return event
+
+    def assign_charging_station(self, charging_station):
+        self.charging_station = charging_station
+        self.save()
 
     objects = TaskManager()
 
