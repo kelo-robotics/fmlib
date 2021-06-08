@@ -1,9 +1,13 @@
+import logging
+
 from fmlib.models.environment import Position
+from fmlib.models.timetable import Timetable
 from pymodm import fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
+from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import AvailabilityStatus
 
 
@@ -38,6 +42,8 @@ ChargingStationManager = Manager.from_queryset(ChargingStationQuerySet)
 
 class ChargingStation(MongoModel):
     station_name = fields.CharField(primary_key=True)
+    timetable = fields.EmbeddedDocumentField(Timetable)
+    archived_timetable = fields.EmbeddedDocumentField(Timetable)
     position = fields.EmbeddedDocumentField(Position)
     status = fields.IntegerField(default=AvailabilityStatus.IDLE)
 
@@ -46,6 +52,12 @@ class ChargingStation(MongoModel):
     class Meta:
         archive_collection = 'charging_station_archive'
         ignore_unknown_fields = True
+
+    def save(self):
+        try:
+            super().save(cascade=True)
+        except ServerSelectionTimeoutError:
+            logging.warning('Could not save models to MongoDB')
 
     def archive(self):
         with switch_collection(self, self.Meta.archive_collection):
@@ -85,6 +97,22 @@ class ChargingStation(MongoModel):
     def by_status(cls, status):
         return cls.objects.by_status(status)
 
+    def get_timetable(self):
+        if self.timetable:
+            return self.timetable.get_timetable()
+
+    def get_archived_timetable(self):
+        if self.archived_timetable:
+            return self.archived_timetable.get_timetable()
+
+    def update_timetable(self, obj):
+        self.timetable = Timetable.from_obj(obj)
+        self.save()
+
+    def update_archived_timetable(self, obj):
+        self.archived_timetable = Timetable.from_obj(obj)
+        self.save()
+
     @classmethod
     def get_all(cls):
         charging_stations = cls.objects.all()
@@ -93,7 +121,7 @@ class ChargingStation(MongoModel):
             try:
                 cls.objects.validate_model(c)
             except ValueError:
-                deprecated.aapend(c)
+                deprecated.append(c)
         return [c for c in charging_stations if c not in deprecated]
 
     def update_availability(self, availability_status):

@@ -10,6 +10,7 @@ from pymongo.errors import ServerSelectionTimeoutError
 from ropod.structs.status import AvailabilityStatus
 
 from fmlib.models.environment import Position
+from fmlib.models.timetable import Timetable
 
 
 class Availability(EmbeddedMongoModel):
@@ -117,6 +118,8 @@ class Robot(MongoModel):
 
     robot_id = fields.IntegerField(primary_key=True)
     serial_number = fields.CharField()
+    timetable = fields.EmbeddedDocumentField(Timetable)
+    archived_timetable = fields.EmbeddedDocumentField(Timetable)
     width = fields.FloatField()
     version = fields.EmbeddedDocumentField(Version)
     simulator = fields.CharField()
@@ -185,6 +188,22 @@ class Robot(MongoModel):
     def get_robots_by_availability(cls, availability_status):
         robots = cls.get_robots()
         return [robot for robot in robots if robot.status.availability.status == availability_status]
+
+    def get_timetable(self):
+        if self.timetable:
+            return self.timetable.get_timetable()
+
+    def get_archived_timetable(self):
+        if self.archived_timetable:
+            return self.archived_timetable.get_timetable()
+
+    def update_timetable(self, obj):
+        self.timetable = Timetable.from_obj(obj)
+        self.save()
+
+    def update_archived_timetable(self, obj):
+        self.archived_timetable = Timetable.from_obj(obj)
+        self.save()
 
     def update_version(self, software, hardware):
         self.version.software = software
