@@ -914,11 +914,12 @@ class ChargingTask(Task):
     @property
     def start_location(self):
         if self.charging_station:
-            return self.charging_station.position
+            return self.charging_station.approach_position
 
     @property
     def finish_location(self):
-        return self.start_location
+        if self.charging_station:
+            return self.charging_station.position
 
     def to_icalendar_event(self):
         event = super().to_icalendar_event()
