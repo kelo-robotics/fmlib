@@ -933,4 +933,5 @@ class ChargingTask(Task):
 
 
 class StopChargingTask(ChargingTask):
+    request = fields.EmbeddedDocumentField(requests.StopChargingRequest)
     objects = TaskManager()
