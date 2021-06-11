@@ -160,6 +160,7 @@ class TaskRequest(Request):
             logging.warning('Could not save models to MongoDB')
 
     def archive(self):
+        self.refresh_from_db()
         with switch_collection(self, TaskRequest.Meta.archive_collection):
             self.save()
         self.delete()
