@@ -936,3 +936,13 @@ class ChargingTask(Task):
 class StopChargingTask(ChargingTask):
     request = fields.EmbeddedDocumentField(requests.StopChargingRequest)
     objects = TaskManager()
+
+    @property
+    def start_location(self):
+        if self.charging_station:
+            return self.charging_station.position
+
+    @property
+    def finish_location(self):
+        if self.charging_station:
+            return self.charging_station.approach_position
