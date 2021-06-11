@@ -9,7 +9,10 @@ class Timetable(EmbeddedMongoModel):
 
     def get_timetable(self):
         # Convert to object
-        return pickle.loads(codecs.decode(self.data.encode(), "base64"))
+        try:
+            return pickle.loads(codecs.decode(self.data.encode(), "base64"))
+        except RuntimeError:
+            return None
 
     @classmethod
     def from_obj(cls, obj):
