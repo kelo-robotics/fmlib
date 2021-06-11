@@ -45,6 +45,7 @@ class ChargingStation(MongoModel):
     timetable = fields.EmbeddedDocumentField(Timetable)
     archived_timetable = fields.EmbeddedDocumentField(Timetable)
     position = fields.EmbeddedDocumentField(Position)
+    approach_position = fields.EmbeddedDocumentField(Position)
     status = fields.IntegerField(default=AvailabilityStatus.IDLE)
 
     objects = ChargingStationManager()
