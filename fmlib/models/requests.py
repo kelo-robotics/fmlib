@@ -20,7 +20,6 @@ from pymodm.errors import ValidationError, DoesNotExist
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError
-from ropod.structs.status import AvailabilityStatus
 from ropod.structs.task import TaskPriority, DisinfectionDose
 from ropod.utils.timestamp import TimeStamp
 
@@ -261,6 +260,10 @@ class TaskRequest(Request):
     @classmethod
     def get_task_requests(cls):
         return [task_request for task_request in cls.get_all_requests()]
+
+    @classmethod
+    def get_task_requests_by_task_type(cls, task_type):
+        return [task_request for task_request in cls.get_all_requests() if task_request.task_type == task_type]
 
     @classmethod
     def get_archived_task_requests(cls):
@@ -697,6 +700,7 @@ class StopChargingRequest(TaskRequest):
     """
     Stop executing charging task. Sent at the end of a charging task or to interrupt an ongoing charging task
     """
+    robot = fields.ReferenceField(Robot)
     earliest_start_time = fields.EmbeddedDocumentField(Timepoint)
     latest_start_time = fields.EmbeddedDocumentField(Timepoint)
     priority = fields.IntegerField(default=TaskPriority.HIGH)
@@ -720,16 +724,6 @@ class StopChargingRequest(TaskRequest):
         return kwargs
 
     def validate_request(self, path_planner, complete_request=True):
-        if len(self.eligible_robots) != 1:
-            raise InvalidRequest("Stop charging request should include one eligible robot")
-        try:
-            robot = Robot.get_robot(self.eligible_robots[0])
-        except DoesNotExist:
-            raise InvalidRequest("Robot %s does not exist", self.eligible_robots[0])
-
-        if robot.status.availability.status != AvailabilityStatus.CHARGING:
-            raise InvalidRequest("Robot %s is not charging", self.eligible_robots[0])
-
         if self.latest_start_time.utc_time < TimeStamp().to_datetime():
             raise InvalidRequestTime("Latest start time %s is in the past" % self.latest_start_time)
         if self.latest_start_time < self.earliest_start_time:
