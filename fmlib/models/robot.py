@@ -31,6 +31,8 @@ class RobotStatus(EmbeddedMongoModel):
     availability = fields.EmbeddedDocumentField(Availability)
     battery = fields.FloatField()
     requires_charging = fields.BooleanField(default=False)
+    attached_to_charging_station = fields.BooleanField(default=False)
+    charging = fields.BooleanField(default=False)
 
 
 class HardwareComponent(EmbeddedMongoModel):
@@ -172,6 +174,24 @@ class Robot(MongoModel):
         self.status.requires_charging = boolean
         self.save()
 
+    @property
+    def attached_to_charging_station(self):
+        return self.status.attached_to_charging_station
+
+    @attached_to_charging_station.setter
+    def attached_to_charging_station(self, boolean):
+        self.status.attached_to_charging_station = boolean
+        self.save()
+
+    @property
+    def charging(self):
+        return self.status.charging
+
+    @charging.setter
+    def charging(self, boolean):
+        self.status.charging = boolean
+        self.save()
+
     @classmethod
     def get_robot(cls, robot_id):
         return cls.objects.get_robot(robot_id)
@@ -188,6 +208,11 @@ class Robot(MongoModel):
     def get_robots_by_availability(cls, availability_status):
         robots = cls.get_robots()
         return [robot for robot in robots if robot.status.availability.status == availability_status]
+
+    def has_position(self):
+        if self.position.x and self.position.y and self.position.theta and self.position.map:
+            return True
+        return False
 
     def get_timetable(self):
         if self.timetable:
