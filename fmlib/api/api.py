@@ -21,7 +21,6 @@ class API:
             matching the middleware listed
 
         Attributes:
-            publish_dict: A dictionary that maps
             middleware_collection: A list of supported middlewares obtained from the config file
             config_params: A dictionary containing the parameters loaded from the config file
             _mf: An object of type MessageFactory to create message templates
@@ -32,7 +31,6 @@ class API:
         self.logger = logging.getLogger(logger_name)
         self.logger.addFilter(ContextFilter())
 
-        self.publish_dict = dict()
         self.interfaces = list()
         self.config_params = dict()
         self.middleware_collection = middleware
@@ -46,26 +44,16 @@ class API:
             msg: a JSON message
             **kwargs: keyword arguments to be passed to the configured functions
         """
-        try:
-            msg_type = msg.get('header').get('type')
-        except AttributeError:
-            self.logger.error("Could not get message type from message: %s", msg, exc_info=True)
+        middlewares = kwargs.get("middleware", list())
+
+        if not middlewares:
+            self.logger.error("No middleware specified to publish msg")
             return
 
-        self.logger.debug("Publishing message of type %s", msg_type)
-
-        for option in self.middleware_collection:
-            try:
-                option_dict = self.publish_dict.get(option)
-                if not option_dict:
-                    continue
-                method = option_dict.get(msg_type.lower()).get('method')
-            except ValueError:
-                self.logger.error("No method defined for message % in option %s", msg_type, option)
-                continue
-
-            self.logger.debug('Using method %s to publish message using %s', method, option)
-            getattr(self.__dict__[option], method)(msg, **kwargs)
+        for middleware in middlewares:
+            interface = self.__dict__[middleware]
+            if hasattr(interface, "publish"):
+                interface.publish(msg, **kwargs)
 
     def get_peer_directory(self):
         for option in self.middleware_collection:
@@ -95,10 +83,6 @@ class API:
 
             self.__dict__[option] = interface
             self.interfaces.append(interface)
-
-            self.publish_dict[option] = config.get('publish')
-
-        self.logger.debug("Publish dictionary: %s", self.publish_dict)
 
     @classmethod
     def get_zyre_api(cls, zyre_config):

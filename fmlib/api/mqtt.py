@@ -48,7 +48,6 @@ class MQTTInterface:
         self.callback_dict[subtopic] = function.__name__
 
     def on_message(self, client, userdata, msg):
-
         if any(subtopic in msg.topic for subtopic in self.subtopics):
             self.queue.put(msg)
 
@@ -77,7 +76,9 @@ class MQTTInterface:
         self.logger.debug("Adding subscriber for topic %s", topic)
         self.client.subscribe(topic)
 
-    def publish(self, msg, topic):
+    def publish(self, msg, **kwargs):
+        topic = kwargs.get("topic")
+        self.logger.debug("Publishing to %s", topic)
         self.client.publish(topic, msg)
 
     def process_msgs(self):

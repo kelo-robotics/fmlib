@@ -37,6 +37,25 @@ class ZyreInterface(RopodPyre):
 
         self.queue.put(dict_msg)
 
+    def publish(self, msg, **kwargs):
+        try:
+            msg_type = msg.get('header').get('type')
+        except AttributeError:
+            self.logger.error("Could not get message type from message: %s", msg, exc_info=True)
+            return
+
+        self.logger.debug("Publishing message of type %s", msg_type)
+
+        try:
+            method = self.publish_dict.get(msg_type.lower()).get('method')
+        except ValueError:
+            self.logger.error("No method defined for message %s", msg_type)
+            return
+
+        self.logger.debug('Using method %s to publish message', method)
+        groups = kwargs.get("groups")
+        getattr(self, method)(msg, groups=groups)
+
     def process_msgs(self):
         while not self.queue.empty():
             dict_msg = self.queue.get()
