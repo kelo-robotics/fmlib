@@ -622,16 +622,12 @@ class Task(MongoModel):
         else:
             self.status.save()
             self.save()
-        if api:
-            self.publish_task_update(api)
 
     def set_recovery_method(self, method, api=None):
         if not self.status:
             self.status = TaskStatus(task_id=self.task_id)
         self.status.recovery_method = method
         self.save()
-        if api:
-            self.publish_task_update(api)
 
     def clear_recovery_method(self):
         if not self.status:
@@ -661,14 +657,10 @@ class Task(MongoModel):
     def pause(self, api=None):
         self.status.paused = True
         self.save()
-        if api:
-            self.publish_task_update(api)
 
     def continue_(self, api=None):
         self.status.paused = False
         self.save()
-        if api:
-            self.publish_task_update(api)
 
     def update_plan(self, task_plan, api=None):
         # Adds the section of the plan that is independent from the robot,
