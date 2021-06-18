@@ -3,7 +3,7 @@ import uuid
 
 import dateutil.parser
 import pytz
-from fmlib.utils.messages import Document
+from fmlib.api.zyre.messages import Document
 from icalendar import Calendar, Timezone, Event as ICalendarEvent
 from icalendar.prop import vRecur, vDDDTypes, vDDDLists
 from pymodm import fields, MongoModel

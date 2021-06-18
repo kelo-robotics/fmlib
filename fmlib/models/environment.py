@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import dateutil.parser
 import numpy as np
-from fmlib.utils.messages import Document
+from fmlib.api.zyre.messages import Document
 from pymodm import EmbeddedMongoModel, fields
 from ropod.utils.timestamp import TimeStamp
 

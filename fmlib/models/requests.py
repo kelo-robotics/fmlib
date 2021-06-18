@@ -13,10 +13,10 @@ from fmlib.models.event import Event
 from fmlib.models.robot import Robot
 from fmlib.models.users import User
 from fmlib.models.waiting_location import WaitingLocation
-from fmlib.utils.messages import Document
+from fmlib.api.zyre.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
-from pymodm.errors import ValidationError, DoesNotExist
+from pymodm.errors import ValidationError
 from pymodm.manager import Manager
 from pymodm.queryset import QuerySet
 from pymongo.errors import ServerSelectionTimeoutError

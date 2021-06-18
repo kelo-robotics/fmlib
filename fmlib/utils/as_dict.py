@@ -3,7 +3,7 @@ https://realpython.com/inheritance-composition-python/#mixing-features-with-mixi
 """
 import uuid
 
-from fmlib.utils.messages import Document
+from fmlib.api.zyre.messages import Document
 from ropod.utils.timestamp import TimeStamp
 from ropod.utils.uuid import from_str
 from datetime import datetime

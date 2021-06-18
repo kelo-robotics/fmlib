@@ -3,6 +3,7 @@ import logging
 from queue import Queue
 
 import paho.mqtt.client as mqtt
+from fmlib.api.mqtt.messages import MessageFactory
 from ropod.utils.logging.counter import ContextFilter
 
 
@@ -20,10 +21,13 @@ class MQTTInterface:
         self.subtopics = kwargs.get("subtopics", list())
         self.queue = Queue()
         self.callback_dict = dict()
+        self.publishers = dict()
 
         self._connected = False
         self.connect()
         self._configure(**kwargs)
+
+        self._mf = MessageFactory()
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
@@ -69,6 +73,9 @@ class MQTTInterface:
             for serial_number in serial_numbers:
                 self.add_subscriber(subscriber["manufacturer"], serial_number, subscriber["subtopic"])
 
+        for publisher in kwargs.get("publishers", list()):
+            self.add_publisher(publisher["manufacturer"], publisher["serial_number"], publisher["subtopic"])
+
         self.client.on_message = self.on_message
 
     def add_subscriber(self, manufacturer, serial_number, subtopic):
@@ -76,10 +83,30 @@ class MQTTInterface:
         self.logger.debug("Adding subscriber for topic %s", topic)
         self.client.subscribe(topic)
 
+    def add_publisher(self, manufacturer, serial_number, subtopic):
+        topic = manufacturer + "/" + serial_number + "/" + subtopic
+        self.logger.debug("Add publisher for topic %s", topic)
+        self.publishers[subtopic] = topic
+
     def publish(self, msg, **kwargs):
-        topic = kwargs.get("topic")
+        topic = msg.topic
         self.logger.debug("Publishing to %s", topic)
-        self.client.publish(topic, msg)
+        self.client.publish(topic, json.dumps(msg, indent=2))
+
+    def create_message(self, model, subtopic):
+        self.logger.debug("Creating message for model %s", model)
+        topic = self.publishers.get(subtopic)
+
+        if topic is None:
+            # Use default manufacturer and serial number
+            manufacturer = ""
+            serial_number = ""
+        else:
+            split_topic = topic.split("/")
+            manufacturer = split_topic[0]
+            serial_number = split_topic[1]
+
+        return self._mf.create_message(model, manufacturer, serial_number, subtopic)
 
     def process_msgs(self):
         while not self.queue.empty():

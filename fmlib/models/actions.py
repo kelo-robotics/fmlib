@@ -3,7 +3,7 @@ import uuid
 import pytz
 from bson.codec_options import CodecOptions
 from fmlib.models.environment import Position
-from fmlib.utils.messages import Document
+from fmlib.api.zyre.messages import Document
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist

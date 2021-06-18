@@ -3,6 +3,7 @@ from queue import Queue
 
 from ropod.pyre_communicator.base_class import RopodPyre
 from ropod.utils.logging.counter import ContextFilter
+from fmlib.api.zyre.messages import MessageFactory
 
 
 class ZyreInterface(RopodPyre):
@@ -14,6 +15,8 @@ class ZyreInterface(RopodPyre):
         self.debug_messages = kwargs.get('debug_messages', list())
         self.publish_dict = kwargs.get('publish', dict())
         self.queue = Queue()
+
+        self._mf = MessageFactory(kwargs.get('schema', 'unknown'))
 
     def register_callback(self, function, msg_type, **kwargs):
         self.logger.debug("Adding callback function %s for message type %s", function.__name__,
@@ -55,6 +58,16 @@ class ZyreInterface(RopodPyre):
         self.logger.debug('Using method %s to publish message', method)
         groups = kwargs.get("groups")
         getattr(self, method)(msg, groups=groups)
+
+    def create_message(self, model):
+        self.logger.debug("Creating message for model %s", model)
+        return self._mf.create_message(model)
+
+    def create_header(self, message_type, **kwargs):
+        return self._mf.create_header(message_type, **kwargs)
+
+    def create_payload_from_dict(self, payload_dict):
+        return self._mf.create_payload_from_dict(payload_dict)
 
     def process_msgs(self):
         while not self.queue.empty():

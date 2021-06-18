@@ -1,7 +1,7 @@
 import os
 
 from fmlib.api.zyre import ZyreInterface
-from fmlib.utils.messages import Header
+from fmlib.api.zyre.messages import Header
 from wstool.multiproject_cmd import cmd_info, get_config
 
 

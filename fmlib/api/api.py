@@ -4,12 +4,12 @@ send messages through the network using a variety of middlewares
 
 import logging
 
-from ropod.utils.logging.counter import ContextFilter
-
-from fmlib.api.mqtt import MQTTInterface
+from fmlib.api.mqtt.interface import MQTTInterface
+from fmlib.api.mqtt.messages import Message as MQTTMessage
 from fmlib.api.rest.interface import RESTInterface
-from fmlib.api.zyre import ZyreInterface
-from fmlib.utils.messages import MessageFactory
+from fmlib.api.zyre.interface import ZyreInterface
+from fmlib.api.zyre.messages import Message as ZyreMessage
+from ropod.utils.logging.counter import ContextFilter
 
 
 class API:
@@ -35,25 +35,28 @@ class API:
         self.config_params = dict()
         self.middleware_collection = middleware
         self._configure(kwargs)
-        self._mf = MessageFactory(kwargs.get('schema', 'unknown'))
 
-    def publish(self, msg, **kwargs):
+    def publish(self, msg,  **kwargs):
         """Publishes a message using the configured functions per middleware
 
         Args:
             msg: a JSON message
             **kwargs: keyword arguments to be passed to the configured functions
         """
-        middlewares = kwargs.get("middleware", list())
+        middleware = None
 
-        if not middlewares:
-            self.logger.error("No middleware specified to publish msg")
+        if isinstance(msg, ZyreMessage):
+            middleware = "zyre"
+        elif isinstance(msg, MQTTMessage):
+            middleware = "mqtt"
+
+        interface = self.get_interface(middleware)
+        if interface is None:
             return
 
-        for middleware in middlewares:
-            interface = self.__dict__[middleware]
-            if hasattr(interface, "publish"):
-                interface.publish(msg, **kwargs)
+        interface = self.__dict__[middleware]
+        if hasattr(interface, "publish"):
+            interface.publish(msg, **kwargs)
 
     def get_peer_directory(self):
         for option in self.middleware_collection:
@@ -176,15 +179,43 @@ class API:
         for interface in self.interfaces:
             interface.run()
 
-    def create_message(self, model):
-        self.logger.debug("Creating message for model %s", model)
-        return self._mf.create_message(model)
+    def get_interface(self, option):
+        if option is None:
+            self.logger.error("No middleware specified to create msg")
+            return
 
-    def create_header(self, message_type, **kwargs):
-        return self._mf.create_header(message_type, **kwargs)
+        interface = self.__dict__[option]
 
-    def create_payload_from_dict(self, payload_dict):
-        return self._mf.create_payload_from_dict(payload_dict)
+        if interface is None:
+            self.logger.error("The middleware %s does not exist", option)
+            return
+
+        return interface
+
+    def create_message(self, model, middleware, *args):
+        interface = self.get_interface(middleware)
+        if interface is None:
+            return
+
+        if hasattr(interface, "create_message"):
+            return interface.create_message(model, *args)
+
+    def create_header(self, message_type, middleware=None, **kwargs):
+        interface = self.get_interface(middleware)
+        if interface is None:
+            return
+
+        if hasattr(interface, "create_header"):
+            return interface.create_header(message_type, **kwargs)
+
+    def create_payload_from_dict(self, payload_dict, middleware=None):
+        interface = self.get_interface(middleware)
+        if interface is None:
+            return
+
+        interface = self.__dict__[middleware]
+        if hasattr(interface, "create_payload_from_dict"):
+            return interface.create_payload_from_dict(payload_dict)
 
 
 def _get_callback_function(obj, component):
