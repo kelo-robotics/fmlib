@@ -43,7 +43,10 @@ class MQTTInterface:
         if self.user:
             self.client.username_pw_set(username=self.user, password=self.password)
         self.client.on_connect = self.on_connect
-        self.client.connect(self.host, self.port)
+        try:
+            self.client.connect(self.host, self.port)
+        except ConnectionRefusedError:
+            self.logger.error("Failed to connect to MQTT Broker")
 
     def register_callback(self, function, subtopic, **kwargs):
         self.logger.debug("Adding callback function %s for subtopic %s", function.__name__,
@@ -63,6 +66,10 @@ class MQTTInterface:
         return self._connected
 
     def _configure(self, **kwargs):
+        if not self.connected:
+            self.logger.error("Failed to configure MQTT interface since connection was refused.")
+            return
+
         robots = kwargs.get("robots")
         all_serial_numbers = [robot_info.get("serial_number") for robot_id, robot_info in robots.items()]
 
