@@ -147,11 +147,11 @@ class TaskRequest(Request):
     objects = RequestManager()
 
     class Meta:
+        task_type = "Task"
         collection_name = "task_request"
         archive_collection = "task_request_archive"
         ignore_unknown_fields = True
         codec_options = CodecOptions(tz_aware=True, tzinfo=pytz.timezone('utc'))
-        task_type = "Task"
 
     def save(self):
         try:
@@ -358,6 +358,7 @@ class TransportationRequest(TaskRequest):
         task_type = "TransportationTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
     def clean(self):
         if not hasattr(self, "pickup_location") or not isinstance(self.pickup_location, Position):
@@ -485,6 +486,7 @@ class NavigationRequest(TaskRequest):
         task_type = "NavigationTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
     def clean(self):
         if not hasattr(self, "start_location") or not isinstance(self.start_location, Position):
@@ -590,6 +592,7 @@ class DefaultNavigationRequest(NavigationRequest):
         task_type = "DefaultNavigationTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
 
 class ChargingRequestQuerySet(RequestQuerySet):
@@ -624,6 +627,7 @@ class ChargingRequest(TaskRequest):
         task_type = "ChargingTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
     @classmethod
     def get_task_requests_by_robot(cls, robot_id):
@@ -710,6 +714,7 @@ class StopChargingRequest(TaskRequest):
         task_type = "StopChargingTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
     @staticmethod
     def map_args(**kwargs):
@@ -763,6 +768,7 @@ class GuidanceRequest(NavigationRequest):
         task_type = "GuidanceTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
 
 class DisinfectionRequest(TaskRequest):
@@ -779,6 +785,7 @@ class DisinfectionRequest(TaskRequest):
         task_type = "DisinfectionTask"
         collection_name = TaskRequest.Meta.collection_name
         archive_collection = TaskRequest.Meta.archive_collection
+        codec_options = TaskRequest.Meta.codec_options
 
     def clean(self):
         if not hasattr(self, "start_location") or not isinstance(self.start_location, Position):
