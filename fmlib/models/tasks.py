@@ -118,9 +118,10 @@ class TimepointConstraint(EmbeddedMongoModel):
         self.earliest_time = earliest_time
         self.latest_time = latest_time
 
+
 class AlternativeTimeslot(EmbeddedMongoModel):
-    start = fields.EmbeddedDocumentField(TimepointConstraint, default=TimepointConstraint())
-    finish = fields.EmbeddedDocumentField(TimepointConstraint, default=TimepointConstraint())
+    start = fields.EmbeddedDocumentField(TimepointConstraint)
+    finish = fields.EmbeddedDocumentField(TimepointConstraint)
 
 
 class TemporalConstraints(EmbeddedMongoModel):
@@ -515,11 +516,6 @@ class Task(MongoModel):
     def alternative_timeslot(self):
         return self.constraints.temporal.alternative_timeslot
 
-    @alternative_timeslot.setter
-    def alternative_timeslot(self, boolean):
-        self.constraints.temporal.alternative_timeslot = boolean
-        self.save()
-
     @property
     def work_time(self):
         return self.constraints.temporal.work_time
@@ -565,7 +561,10 @@ class Task(MongoModel):
             self.save()
 
     def update_alternative_start_time(self, earliest_time, latest_time, save_in_db=True):
-        self.alternative_start_time.update(earliest_time, latest_time)
+        if not self.alternative_timeslot:
+            self.constraints.temporal.alternative_timeslot = AlternativeTimeslot()
+            self.constraints.temporal.alternative_timeslot.start = TimepointConstraint()
+        self.constraints.temporal.alternative_timeslot.start.update(earliest_time, latest_time)
         if save_in_db:
             self.save()
 
