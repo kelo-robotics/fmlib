@@ -63,7 +63,7 @@ class Position(EmbeddedMongoModel):
     y = fields.FloatField()
     theta = fields.FloatField(default=0)
     id = fields.IntegerField(blank=True)
-    map = fields.CharField()
+    map_id = fields.CharField()
 
     class Meta:
         ignore_unknown_fields = True
@@ -72,7 +72,7 @@ class Position(EmbeddedMongoModel):
     def __eq__(self, other):
         if not isinstance(other, Position):
             return False
-        return (self.map == other.map
+        return (self.map_id == other.map_id
                 and self.x == other.x
                 and self.y == other.y
                 and self.theta == other.theta)
@@ -82,8 +82,8 @@ class Position(EmbeddedMongoModel):
 
     def __str__(self):
         to_print = "[{}, {}, {}]".format(self.x, self.y, self.theta)
-        if self.map is not None:
-            to_print += f" map: {self.map}"
+        if self.map_id is not None:
+            to_print += f" map: {self.map_id}"
         if self.id is not None:
             to_print += f" id : {self.id}"
         return to_print
@@ -93,7 +93,7 @@ class Position(EmbeddedMongoModel):
         self.y = kwargs.get('y')
         self.theta = kwargs.get('theta')
         self.id = kwargs.get('id')
-        self.map = kwargs.get('map')
+        self.map_id = kwargs.get('map_id')
 
     def get_distance(self, other):
         return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
@@ -159,7 +159,6 @@ class Position(EmbeddedMongoModel):
                 closest_point = point
 
         return closest_point
-
 
     def to_dict(self):
         dict_repr = self.to_son().to_dict()

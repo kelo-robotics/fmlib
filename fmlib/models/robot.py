@@ -210,7 +210,7 @@ class Robot(MongoModel):
         return [robot for robot in robots if robot.status.availability.status == availability_status]
 
     def has_position(self):
-        if self.position.x and self.position.y and self.position.theta and self.position.map:
+        if self.position.x and self.position.y and self.position.theta and self.position.map_id:
             return True
         return False
 
@@ -259,7 +259,7 @@ class Robot(MongoModel):
         return all(i in self.capabilities for i in task.capabilities)
 
     def is_eligible(self, task):
-        if self.is_capable(task) and self.position.map == task.request.map:
+        if self.is_capable(task) and self.position.map_id == task.request.map:
             if task.request.eligible_robots and self.robot_id in task.request.eligible_robots:
                 return True
             elif not task.request.eligible_robots:
