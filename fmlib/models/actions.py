@@ -1,9 +1,10 @@
 import uuid
 
+import inflection
 import pytz
 from bson.codec_options import CodecOptions
-from fmlib.models.environment import Position
 from fmlib.api.zyre.messages import Document
+from fmlib.models.environment import Position
 from pymodm import EmbeddedMongoModel, fields, MongoModel
 from pymodm.context_managers import switch_collection
 from pymodm.errors import DoesNotExist
@@ -67,7 +68,7 @@ class EstimatedDuration(EmbeddedMongoModel):
 
 class Action(MongoModel, EmbeddedMongoModel):
     action_id = fields.UUIDField(primary_key=True)
-    type = fields.CharField()
+    action_type = fields.CharField()
     estimated_duration = fields.EmbeddedDocumentField(EstimatedDuration, blank=True)
     pre_task_action = fields.BooleanField(default=False)
 
@@ -101,6 +102,16 @@ class Action(MongoModel, EmbeddedMongoModel):
         dict_repr.pop('_cls')
         dict_repr['_id'] = str(dict_repr.pop('_id'))
         return dict_repr
+
+    def to_msg(self):
+        msg = dict()
+        msg['actionId'] = str(self.action_id)
+        msg['actionType'] = inflection.camelize(self.action_type, False)
+        msg['actionParameters'] = self.get_parameters_dict()
+        return msg
+
+    def get_parameters_dict(self):
+        return dict()
 
     def update_duration(self, mean, variance, save_in_db=True):
         if not self.estimated_duration:
@@ -175,6 +186,12 @@ class GoTo(Action):
     def destination(self):
         return self.locations[-1]
 
+    def get_parameters_dict(self):
+        parameters = {"locations": []}
+        for l in self.locations:
+            parameters["locations"] = l.to_dict()
+        return parameters
+
 
 class EnterElevator(Action):
     elevator_id = fields.IntegerField()
@@ -205,30 +222,45 @@ class Undock(Action):
     pass
 
 
-class Detect(Action):
-    item = fields.CharField()
+class DetectObject(Action):
+    objectType = fields.CharField()
+
+    def get_parameters_dict(self):
+        return {"objectType": self.objectType}
 
 
-class Charge(Action):
+class StartCharging(Action):
     until_percentage = fields.FloatField()
     duration = fields.FloatField()  # seconds
 
+    def get_parameters_dict(self):
+        return {"untilPercentage": self.until_percentage,
+                "duration": self.duration}
 
-class UndockCharger(Action):
+
+class StopCharging(Action):
     pass
 
 
-class Navigation(Action):
+class Navigate(Action):
     start = fields.EmbeddedDocumentField(Position)
     goal = fields.EmbeddedDocumentField(Position)
     velocity = fields.FloatField(default=1.5)
 
+    def get_parameters_dict(self):
+        return {"start": self.start.to_dict(),
+                "goal": self.goal.to_dict(),
+                "velocity": self.velocity}
 
-class Standstill(Action):
+
+class StandStill(Action):
     duration = fields.FloatField()
 
+    def get_parameters_dict(self):
+        return {"duration": self.duration}
 
-class WallFollowing(Action):
+
+class FollowWall(Action):
     area = fields.CharField()
     start = fields.EmbeddedDocumentField(Position)
     checkpoints = fields.EmbeddedDocumentListField(Position)
@@ -236,6 +268,16 @@ class WallFollowing(Action):
     velocity = fields.FloatField()
 
     objects = ActionManager()
+
+    def get_parameters_dict(self):
+        parameters = {"checkpoints": [],
+                      "polygon": [],
+                      "velocity": self.velocity}
+        for c in self.checkpoints:
+            parameters["checkpoints"].append(c.to_dict())
+        for p in self.polygon:
+            parameters["polygon"].append(p.to_dict())
+        return parameters
 
     @classmethod
     def get_actions(cls, area=None, velocity=None):
@@ -256,8 +298,12 @@ class WallFollowing(Action):
         return actions
 
 
-class LampControl(Action):
-    switch_on = fields.BooleanField()
+class ActivateUVCLight(Action):
+    pass
+
+
+class DeactivateUVCLight(Action):
+    pass
 
 
 class ActionProgress(MongoModel, EmbeddedMongoModel):
