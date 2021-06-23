@@ -460,12 +460,45 @@ class Task(MongoModel):
             for i, plan in enumerate(self.plan):
                 parsed_actions = list()
                 for action in plan.actions:
-                    a = action.to_dict()
-                    a.pop("estimated_duration")
+                    a = action.to_msg()
                     parsed_actions.append(a)
                 dict_repr["plan"][i]["actions"] = parsed_actions
         dict_repr["status"] = self.status.to_dict()
         return dict_repr
+
+    def to_order_msg(self):
+        actions = self.actions_to_msg()
+        node_id = uuid.uuid4()
+
+        # If the first action is a "navigate" action, does not include it in the action list.
+        # The robot adds a "navigate" action to go to the node position
+        try:
+            first_action = actions[0]
+            if first_action["actionType"] == "navigate":
+                node_id = first_action["actionId"]
+                actions.pop(0)
+        except IndexError:
+            pass
+
+        msg = {"orderId": str(self.task_id),
+               "zoneSetId": "",
+               "nodes": [
+                   {"nodeId": node_id,
+                    "nodePosition": self.start_location.to_dict(),
+                    "actions": actions
+                    }
+               ]
+               }
+        return msg
+
+    def actions_to_msg(self):
+        actions = list()
+        if self.plan:
+            for i, plan in enumerate(self.plan):
+                for action in plan.actions:
+                    a = action.to_msg()
+                    actions.append(a)
+        return actions
 
     def to_msg(self):
         msg = Message.from_model(self)
