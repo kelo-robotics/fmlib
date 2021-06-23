@@ -1,3 +1,4 @@
+from fmlib.utils.messages import format_msg
 from ropod.utils.timestamp import TimeStamp
 
 
@@ -23,11 +24,17 @@ class Header(dict):
 class Message(dict):
     header_ids = dict()
 
-    def __init__(self, model, header):
+    def __init__(self, model, header, get_msg_method):
         super().__init__()
 
         self.update(header)
-        # self.update(model.to_dict())
+
+        try:
+            payload = getattr(model, get_msg_method)()
+            payload = format_msg(payload)
+            self.update(payload)
+        except AttributeError:
+            print(f"Method {get_msg_method} is not defined in {model}")
 
         self.topic = header.topic
 
@@ -38,9 +45,9 @@ class Message(dict):
 
 class MessageFactory:
 
-    def create_message(self, model, manufacturer, serial_number, subtopic):
+    def create_message(self, model, manufacturer, serial_number, subtopic, get_msg_method):
         header = Header(manufacturer, serial_number, subtopic)
-        msg = Message(model, header)
+        msg = Message(model, header, get_msg_method)
         return msg
 
     def create_header(self, manufacturer, serial_number, subtopic):

@@ -100,7 +100,7 @@ class MQTTInterface:
         self.logger.debug("Publishing to %s", topic)
         self.client.publish(topic, json.dumps(msg, indent=2))
 
-    def create_message(self, model, subtopic):
+    def create_message(self, model, subtopic, get_msg_method="to_dict"):
         self.logger.debug("Creating message for model %s", model)
         topic = self.publishers.get(subtopic)
 
@@ -113,7 +113,7 @@ class MQTTInterface:
             manufacturer = split_topic[0]
             serial_number = split_topic[1]
 
-        return self._mf.create_message(model, manufacturer, serial_number, subtopic)
+        return self._mf.create_message(model, manufacturer, serial_number, subtopic, get_msg_method)
 
     def process_msgs(self):
         while not self.queue.empty():
