@@ -184,7 +184,7 @@ class API:
             self.logger.error("No middleware specified to create msg")
             return
 
-        interface = self.__dict__[option]
+        interface = self.__dict__.get(option)
 
         if interface is None:
             self.logger.error("The middleware %s does not exist", option)
