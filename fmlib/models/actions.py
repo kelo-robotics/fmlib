@@ -223,10 +223,10 @@ class Undock(Action):
 
 
 class DetectObject(Action):
-    objectType = fields.CharField()
+    object_type = fields.CharField()
 
     def get_parameters_dict(self):
-        return {"objectType": self.objectType}
+        return {"objectType": self.object_type}
 
 
 class StartCharging(Action):
